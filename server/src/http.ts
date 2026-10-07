@@ -332,13 +332,13 @@ function sendResponse(res: ServerResponse, response: RouteResponse): void {
   sendJson(res, response.status, response.body, response.cookies);
 }
 
-/** 按路由选择请求体上限：整库替换与图片上传更宽松；其余保持 2 MiB。 */
-/** 转发路由：`/api/webdav` 与 `/api/webdav/*`，但 `/api/webdav/config` 是普通 JSON 设置接口。 */
+/** 转发子路径 `/api/webdav/*`；`/api/webdav/config` 是普通 JSON 设置接口，不算转发。 */
 function isRelayPath(path: string): boolean {
-  if (path === '/api/webdav' || path === '/api/webdav/config') return false;
+  if (path === '/api/webdav/config') return false;
   return path.startsWith('/api/webdav/');
 }
 
+/** 按路由选择请求体上限：整库替换与转发更宽松；其余保持 2 MiB。 */
 function bodyLimitFor(method: string, path: string): number {
   if (method === 'PUT' && path === '/api/data/replace') return MAX_REPLACE_BODY_BYTES;
   if (path === '/api/webdav' || isRelayPath(path)) return MAX_RELAY_BODY_BYTES;
