@@ -17,6 +17,7 @@ import {
 } from '../components/icons';
 import { ConfirmDialog, IconButton, Toggle } from '../components/ui';
 import { PasswordField } from '../components/PasswordField';
+import { ModeSettings } from '../components/ModeSettings';
 import { ServerSettings } from '../components/ServerSettings';
 import { WebDavSettings } from '../components/WebDavSettings';
 import { SEED_PALETTES } from '../lib/theme';
@@ -365,6 +366,10 @@ export default function SettingsPage() {
 
         <Group title="WebDAV 云备份" icon={<CloudIcon width={18} height={18} />}>
           <WebDavSettings onNotice={setNotice} />
+        </Group>
+
+        <Group title="运行模式" icon={<ServerIcon width={18} height={18} />}>
+          <ModeSettings onNotice={setNotice} />
         </Group>
 
         <Group title="服务器" icon={<ServerIcon width={18} height={18} />}>
