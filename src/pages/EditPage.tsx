@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowBackIcon, SaveIcon, ChevronDownIcon, PlusIcon, CloseIcon } from '../components/icons';
+import { ArrowBackIcon, SaveIcon, ChevronRightIcon, PlusIcon, CloseIcon } from '../components/icons';
 import { IconButton, Toggle } from '../components/ui';
 import { createReminderItem, type NotificationTime, type ReminderItem, type ReminderType, type RepeatUnit } from '../types/reminder';
 import {
@@ -216,7 +216,7 @@ export default function EditPage() {
           <button type="button" className={styles.groupRow} onClick={() => setShowRepeat((value) => !value)}>
             <span className={styles.fieldLabel}>重复</span>
             <span className={styles.groupValue}>{repeatSummary(draft, isInterval)}</span>
-            <ChevronDownIcon className={`${styles.chevron} ${showRepeat ? styles.chevronOpen : ''}`} width={20} height={20} />
+            <ChevronRightIcon className={`${styles.chevron} ${showRepeat ? styles.chevronOpen : ''}`} width={20} height={20} />
           </button>
           {showRepeat && (
             <div className={styles.panel}>
@@ -311,7 +311,7 @@ export default function EditPage() {
           <button type="button" className={styles.groupRow} onClick={() => setShowNotifications((value) => !value)}>
             <span className={styles.fieldLabel}>提醒设置</span>
             <span className={styles.groupValue}>{notificationSummary(draft)}</span>
-            <ChevronDownIcon className={`${styles.chevron} ${showNotifications ? styles.chevronOpen : ''}`} width={20} height={20} />
+            <ChevronRightIcon className={`${styles.chevron} ${showNotifications ? styles.chevronOpen : ''}`} width={20} height={20} />
           </button>
           {showNotifications && (
             <div className={styles.panel}>
@@ -395,7 +395,7 @@ export default function EditPage() {
           <button type="button" className={styles.groupRow} onClick={() => setShowNotes((value) => !value)}>
             <span className={styles.fieldLabel}>备注</span>
             <span className={styles.groupValue}>{draft.notes.trim() === '' ? '点击添加备注' : '已填写'}</span>
-            <ChevronDownIcon className={`${styles.chevron} ${showNotes ? styles.chevronOpen : ''}`} width={20} height={20} />
+            <ChevronRightIcon className={`${styles.chevron} ${showNotes ? styles.chevronOpen : ''}`} width={20} height={20} />
           </button>
           {showNotes && (
             <div className={styles.panel}>
