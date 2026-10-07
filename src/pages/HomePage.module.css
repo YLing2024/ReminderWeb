@@ -29,7 +29,34 @@
 
 .topActions {
   display: flex;
+  align-items: center;
   gap: 4px;
+}
+
+/* 视图切换：手机档用左下 FAB；≥600px 改为顶栏分段控件，避免被左侧导航遮挡 */
+.viewSwitch {
+  display: none;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.viewSwitchButton,
+.viewSwitchActive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+}
+
+.viewSwitchActive {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
 }
 
 .status {
@@ -170,6 +197,13 @@
   }
   .fab {
     bottom: 24px;
+  }
+  /* ≥600px 顶栏内提供分段控件，左下 FAB 让位（否则会被固定导航轨盖住） */
+  .viewSwitch {
+    display: inline-flex;
+  }
+  .fabLeft {
+    display: none;
   }
 }
 

@@ -135,6 +135,26 @@ export default function HomePage() {
         <header className={styles.topBar}>
           <span className={styles.wordmark}>Reminder</span>
           <div className={styles.topActions}>
+            <div className={styles.viewSwitch} role="group" aria-label="视图切换">
+              <button
+                type="button"
+                className={viewMode === 'CARD' ? styles.viewSwitchActive : styles.viewSwitchButton}
+                aria-pressed={viewMode === 'CARD'}
+                title="卡片视图"
+                onClick={() => void updateSettings({ viewMode: 'CARD' })}
+              >
+                <GridIcon width={20} height={20} />
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'LIST' ? styles.viewSwitchActive : styles.viewSwitchButton}
+                aria-pressed={viewMode === 'LIST'}
+                title="列表视图"
+                onClick={() => void updateSettings({ viewMode: 'LIST' })}
+              >
+                <ListIcon width={20} height={20} />
+              </button>
+            </div>
             <IconButton label="搜索" onClick={() => navigate('/search')}>
               <SearchIcon />
             </IconButton>
