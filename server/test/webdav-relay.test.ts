@@ -151,10 +151,17 @@ test('SSRF：默认拒绝回环 / 内网 / 元数据地址', async () => {
   }
 });
 
-test('凭据仅本次请求使用：不落库、不进响应', async () => {
+test('凭据仅本次请求使用：不落库、不进响应、不写日志', async () => {
   await withAllowPrivate(async () => {
     const dav = await startLocalDav();
-    const ts = await startTestServer({ env: { AUTH_MODE: 'none' } });
+    const logs: string[] = [];
+    const logger = {
+      debug: (m: string) => logs.push(m),
+      info: (m: string) => logs.push(m),
+      warn: (m: string) => logs.push(m),
+      error: (m: string) => logs.push(m),
+    };
+    const ts = await startTestServer({ env: { AUTH_MODE: 'none' }, logger });
     try {
       const res = await fetch(`${ts.url}/api/webdav/x`, {
         method: 'PROPFIND',
@@ -163,6 +170,7 @@ test('凭据仅本次请求使用：不落库、不进响应', async () => {
       const text = await res.text();
       assert.equal(text.includes('leak-secret-value'), false);
       assert.equal(text.includes('leakuser'), false);
+      assert.equal(logs.join('\n').includes('leak-secret-value'), false, '日志不得包含口令');
       // 审计表没有转发记录，meta / 各业务表也不含凭据。
       const audit = ts.db.prepare('SELECT COUNT(*) AS n FROM audit').get() as { n: number };
       assert.equal(Number(audit.n), 0);

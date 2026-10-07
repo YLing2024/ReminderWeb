@@ -34,6 +34,8 @@ export interface StartOptions {
   now?: () => number;
   /** 注入 WebDAV 同步引擎（测试用）。 */
   sync?: SyncEngine | null;
+  /** 注入日志器（测试用），用于断言不打印敏感值。 */
+  logger?: Logger;
   /** 用已建好的 db 与解析后的 config 构造同步引擎（测试用）。 */
   syncFactory?: (db: DatabaseSync, config: Config) => SyncEngine | null;
 }
@@ -50,7 +52,7 @@ export async function startTestServer(options: StartOptions = {}): Promise<TestS
   options.setup?.(db);
   const rateLimiter = createRateLimiter({ limit: config.loginRateLimit });
   const sync = options.syncFactory !== undefined ? options.syncFactory(db, config) : (options.sync ?? null);
-  const server = createAppServer({ config, db, rateLimiter, logger: silentLogger, now: options.now, sync });
+  const server = createAppServer({ config, db, rateLimiter, logger: options.logger ?? silentLogger, now: options.now, sync });
   await new Promise<void>((resolvePromise) => {
     server.listen(0, '127.0.0.1', () => resolvePromise());
   });
