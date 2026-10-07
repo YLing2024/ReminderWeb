@@ -42,6 +42,58 @@ export interface AppLockCredential {
 /** 应用锁本地存储值：v2 凭据对象，或 v1 遗留的十六进制摘要字符串。 */
 export type StoredAppLock = AppLockCredential | string;
 
+/**
+ * 解锁状态的会话标记键。
+ *
+ * 只写 sessionStorage：同一标签页内有效，关闭标签页或新开标签页都需要重新解锁。
+ * 之所以不能放在组件 state 里 —— 路由切换会重挂整棵界面（App 的错误边界按路径做 key），
+ * 组件状态跟着丢失，于是每次跳页都要重输密码。
+ */
+export const UNLOCK_SESSION_KEY = 'reminderweb:unlocked';
+
+function sessionStore(): Storage | null {
+  try {
+    const store = (globalThis as { sessionStorage?: Storage }).sessionStorage;
+    return store ?? null;
+  } catch {
+    // 隐私模式等场景下读取 sessionStorage 会抛错，按“没有存储”处理。
+    return null;
+  }
+}
+
+/** 当前标签页是否已解锁；存储不可用时返回 false（退化为每次都要解锁）。 */
+export function isSessionUnlocked(): boolean {
+  const store = sessionStore();
+  if (store === null) return false;
+  try {
+    return store.getItem(UNLOCK_SESSION_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** 标记当前标签页已解锁。 */
+export function markSessionUnlocked(): void {
+  const store = sessionStore();
+  if (store === null) return;
+  try {
+    store.setItem(UNLOCK_SESSION_KEY, '1');
+  } catch {
+    // 写不进去就退化为未解锁，不影响其它逻辑。
+  }
+}
+
+/** 清除解锁标记：从后台切回、关闭应用锁、清空数据时调用。 */
+export function clearSessionUnlocked(): void {
+  const store = sessionStore();
+  if (store === null) return;
+  try {
+    store.removeItem(UNLOCK_SESSION_KEY);
+  } catch {
+    // 同上，忽略。
+  }
+}
+
 export interface VerifyResult {
   /** 密码是否正确。 */
   ok: boolean;

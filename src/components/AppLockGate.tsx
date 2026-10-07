@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { LockIcon } from './icons';
 import { PasswordField } from './PasswordField';
 import { ConfirmDialog } from './ui';
-import { verifyStoredPassword, type AppLockCredential, type StoredAppLock } from '../lib/app-lock';
+import { verifyStoredPassword, isSessionUnlocked, markSessionUnlocked, clearSessionUnlocked, type AppLockCredential, type StoredAppLock } from '../lib/app-lock';
 import { useReminderStore } from '../store/useReminderStore';
 import styles from './AppLockGate.module.css';
 
@@ -17,7 +17,8 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   const settings = useReminderStore((state) => state.settings);
   const updateSettings = useReminderStore((state) => state.updateSettings);
   const resetAll = useReminderStore((state) => state.resetAll);
-  const [locked, setLocked] = useState(true);
+  // 解锁状态放在 sessionStorage：路由切换会重挂本组件，state 会丢，session 标记不会。
+  const [locked, setLocked] = useState(() => !isSessionUnlocked());
   const [forgotOpen, setForgotOpen] = useState(false);
   const wasHidden = useRef(false);
 
@@ -25,6 +26,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
         wasHidden.current = true;
+        clearSessionUnlocked();
       } else if (wasHidden.current) {
         wasHidden.current = false;
         setLocked(true);
@@ -33,6 +35,12 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
+
+  // 应用锁关闭（或没设密码）时不留解锁标记，重新开启后仍要先解锁。
+  const enabled = loaded && settings.appLockEnabled && settings.appLockPasswordHash !== null;
+  useEffect(() => {
+    if (!enabled) clearSessionUnlocked();
+  }, [enabled]);
 
   const stored = settings.appLockPasswordHash;
   const active = loaded && settings.appLockEnabled && stored !== null;
@@ -50,6 +58,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
           stored={stored}
           onUnlock={(upgraded) => {
             if (upgraded !== null) void updateSettings({ appLockPasswordHash: upgraded });
+            markSessionUnlocked();
             setLocked(false);
           }}
         />
@@ -69,6 +78,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
         onConfirm={() => {
           void resetAll();
           setForgotOpen(false);
+          clearSessionUnlocked();
           setLocked(false);
         }}
       />
