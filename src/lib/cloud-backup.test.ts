@@ -66,12 +66,14 @@ function createMemoryWebDavServer() {
 
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const url = new URL(raw);
+    // M12 §1：客户端一律经后端 `/api/webdav` 转发，目标地址与凭据在 `X-Dav-*` 头里。
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    const socket = new URL(raw, 'http://localhost');
+    if (headers['X-Dav-User'] !== undefined || headers['X-Dav-Password'] !== undefined) {
+      lastAuth = `Basic ${btoa(`${headers['X-Dav-User'] ?? ''}:${headers['X-Dav-Password'] ?? ''}`)}`;
+    }
+    const url = new URL(headers['X-Dav-Url'] ?? socket.href, socket);
     const method = (init?.method ?? 'GET').toUpperCase();
-    const headers = init?.headers;
-    const authorization =
-      headers instanceof Headers ? headers.get('Authorization') : (headers as Record<string, string> | undefined)?.Authorization;
-    if (typeof authorization === 'string') lastAuth = authorization;
 
     const name = decodeURIComponent(url.pathname.replace(/^\/dav\//, ''));
 

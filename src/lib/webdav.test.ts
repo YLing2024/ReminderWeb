@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
   WebDavError,
-  buildAuthHeader,
   createThrottledRunner,
   mapFetchError,
   mapHttpError,
@@ -51,19 +50,6 @@ describe('normalizeBaseUrl URL 规范化', () => {
   it('空地址与非 http(s) 协议报错', () => {
     expect(() => normalizeBaseUrl('   ')).toThrow(/服务器地址/);
     expect(() => normalizeBaseUrl('ftp://dav.example.com/')).toThrow(WebDavError);
-  });
-});
-
-describe('buildAuthHeader Basic 认证编码', () => {
-  it('ASCII 用户名口令', () => {
-    expect(buildAuthHeader('davuser', 'secret')).toBe(`Basic ${btoa('davuser:secret')}`);
-  });
-
-  it('中文口令按 UTF-8 Base64，可逆', () => {
-    const header = buildAuthHeader('用户', '密码');
-    const expected = `Basic ${btoa(String.fromCharCode(...new TextEncoder().encode('用户:密码')))}`;
-    expect(header).toBe(expected);
-    expect(atob(header.slice('Basic '.length))).not.toBe('');
   });
 });
 
@@ -126,15 +112,16 @@ describe('错误码到中文文案映射', () => {
     expect(mapHttpError(500).message).toBe('服务器返回 500');
   });
 
-  it('网络 / 超时 / CORS', () => {
+  it('网络失败统一映射为「需要本应用服务器在运行」，不暴露 TypeError 文案', () => {
     const abortError = new Error('aborted');
     abortError.name = 'AbortError';
-    expect(mapFetchError(abortError, { url: 'https://dav.example.com/x', pageOrigin: 'https://dav.example.com' }).code).toBe('NETWORK');
+    expect(mapFetchError(abortError).code).toBe('NETWORK');
 
     const failed = new TypeError('Failed to fetch');
-    expect(mapFetchError(failed, { url: 'https://dav.example.com/x', pageOrigin: 'https://app.example.com' }).code).toBe('CORS');
-    expect(mapFetchError(failed, { url: 'https://dav.example.com/x', pageOrigin: 'https://dav.example.com' }).code).toBe('NETWORK');
-    expect(mapFetchError(failed, { url: 'https://dav.example.com/x', pageOrigin: 'https://dav.example.com' }).message).toContain('连不上服务器');
+    const mapped = mapFetchError(failed);
+    expect(mapped.code).toBe('NETWORK');
+    expect(mapped.message).toContain('本应用服务器在运行');
+    expect(mapped.message).not.toContain('Failed to fetch');
   });
 });
 
@@ -158,14 +145,14 @@ describe('客户端请求与错误映射', () => {
     ).rejects.toMatchObject({ code: 'AUTH' });
   });
 
-  it('跨域网络失败映射为 CORS', async () => {
+  it('后端不可达（TypeError: Failed to fetch）时给出指向服务器在运行的提示', async () => {
     const fetchImpl = (() => Promise.reject(new TypeError('Failed to fetch'))) as unknown as typeof fetch;
     await expect(
       testConnection(
         { server: 'https://dav.example.com/dav/', username: 'davuser', password: 'secret' },
-        { fetchImpl, pageOrigin: 'https://app.example.com' },
+        { fetchImpl },
       ),
-    ).rejects.toMatchObject({ code: 'CORS' });
+    ).rejects.toMatchObject({ code: 'NETWORK', message: expect.stringContaining('本应用服务器在运行') });
   });
 
   it('请求超时中止并映射为网络错误', async () => {
@@ -199,8 +186,9 @@ describe('pruneBackups 保留份数裁剪', () => {
 
   it('多于 N 份时删除最旧的，只 DELETE 本应用文件', async () => {
     const deleted: string[] = [];
-    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
-      deleted.push(String(url));
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      deleted.push(headers['X-Dav-Url'] ?? '');
       return makeResponse(204);
     }) as unknown as typeof fetch;
     const config = { server: 'https://dav.example.com/dav/', username: 'davuser', password: 'secret' };
@@ -226,9 +214,9 @@ describe('pruneBackups 保留份数裁剪', () => {
     ];
     const fetchMock = vi.fn(async () => makeResponse(204)) as unknown as typeof fetch;
     expect(await pruneBackups(config, mixed, 1, { fetchImpl: fetchMock })).toBe(1);
-    expect(String((fetchMock as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]![0])).toContain(
-      'reminder-backup-20260101-120000.zip',
-    );
+    const firstCall = (fetchMock as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]!;
+    const headers = (firstCall[1] as RequestInit | undefined)?.headers as Record<string, string>;
+    expect(headers['X-Dav-Url']).toContain('reminder-backup-20260101-120000.zip');
   });
 });
 

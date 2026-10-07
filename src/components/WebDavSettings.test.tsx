@@ -116,28 +116,24 @@ describe('WebDavSettings 两模式分组显隐', () => {
     expect(html).not.toContain('WebDAV 连接方式');
   });
 
-  it('客户端模式：显示 WebDAV 直连输入框与浏览器直连操作', () => {
+  it('客户端模式：显示 WebDAV 配置与经服务器转发的说明', () => {
     const html = renderToString(createElement(WebDavSettings, { onNotice: () => {}, mode: 'client' }));
-    expect(html).toContain('浏览器直连你的 WebDAV 服务器');
     expect(html).toContain('placeholder="https://dav.example.com/dav/"');
     expect(html).toContain('测试连接');
     expect(html).toContain('立即备份');
     expect(html).toContain('从云端恢复');
     expect(html).toContain('自动备份');
     expect(html).toContain('保留份数');
+    expect(html).toContain('WebDAV 请求经本应用服务器转发，因此浏览器不受跨域限制。');
     expect(html).not.toContain('立即同步');
   });
 
-  it('客户端模式：连接方式提供自动/同源代理/直连并说明当前实际方式', () => {
+  it('客户端模式：不再出现「连接方式」三选一', () => {
     const html = renderToString(createElement(WebDavSettings, { onNotice: () => {}, mode: 'client' }));
-    expect(html).toContain('WebDAV 连接方式');
-    expect(html).toContain('自动（推荐）');
-    expect(html).toContain('同源代理');
-    expect(html).toContain('直连');
-    // 默认 serverReachable=false → 实际走直连，并提示未检测到后端。
-    expect(html).toContain('当前实际使用：');
-    expect(html).toContain('浏览器直连');
-    expect(html).toContain('未检测到后端服务');
+    expect(html).not.toContain('WebDAV 连接方式');
+    expect(html).not.toContain('同源代理');
+    expect(html).not.toContain('直连');
+    expect(html).not.toContain('自动（推荐）');
   });
 
   it('检测中：显示检测提示', () => {

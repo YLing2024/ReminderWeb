@@ -30,7 +30,6 @@ export const LOCAL_ONLY_SETTING_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   'appLockEnabled',
   'appLockPasswordHash',
   'webdavEnabled',
-  'webdavTransport',
   'webdavServer',
   'webdavUsername',
   'webdavPassword',

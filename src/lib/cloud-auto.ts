@@ -2,13 +2,12 @@
  * 自动云备份：监听数据变动，延迟合并为一次上传（需求 M4 §2「自动备份」）。
  *
  * 上传在后台进行，不阻塞 UI；失败只写状态，不打断用户操作。
- * 仅在客户端（纯前端）模式的 WebDAV 直连配置中使用。
+ * 仅在客户端（纯前端）模式的 WebDAV 配置中使用（请求经本应用服务器转发）。
  */
 import { useEffect } from 'react';
 import { useReminderStore } from '../store/useReminderStore';
 import { uploadCurrentBackup } from './cloud-backup';
 import { AUTO_BACKUP_DELAY_MS, createThrottledRunner } from './webdav';
-import { parseTransportPreference, resolveWebDavTransport } from './webdav-transport';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '自动备份失败';
@@ -24,19 +23,12 @@ export function useCloudAutoBackup(): void {
 
     const runner = createThrottledRunner(async () => {
       const state = useReminderStore.getState();
-      const transport = resolveWebDavTransport(
-        parseTransportPreference(state.settings.webdavTransport),
-        state.serverReachable,
-      );
       try {
-        const outcome = await uploadCurrentBackup(
-          {
-            reminders: state.reminders,
-            tags: state.tags,
-            settings: state.settings,
-          },
-          { transport },
-        );
+        const outcome = await uploadCurrentBackup({
+          reminders: state.reminders,
+          tags: state.tags,
+          settings: state.settings,
+        });
         await useReminderStore.getState().updateSettings({
           webdavLastSuccessAt: Date.now(),
           webdavLastResult: `自动备份成功：${outcome.fileName}`,

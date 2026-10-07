@@ -22,14 +22,6 @@ import {
 } from '../lib/cloud-backup';
 import { testConnection, type WebDavFile } from '../lib/webdav';
 import {
-  parseTransportPreference,
-  resolveWebDavTransport,
-  transportExplanation,
-  transportPreferenceLabel,
-  WEBDAV_TRANSPORT_PREFERENCES,
-  type WebDavTransportPreference,
-} from '../lib/webdav-transport';
-import {
   actionLabel,
   appliedTotal,
   deleteConfirmMessage,
@@ -43,7 +35,7 @@ import { useReminderStore, type StorageMode } from '../store/useReminderStore';
 import { ConfirmDialog, Toggle } from './ui';
 import styles from './WebDavSettings.module.css';
 
-/** 云端备份条目的最小展示字段（服务器条目与浏览器直连条目通用）。 */
+/** 云端备份条目的最小展示字段（服务器条目与客户端转发条目通用）。 */
 type BackupEntry = { name: string; size: number; modifiedAt: number };
 
 /**
@@ -346,7 +338,7 @@ function ServerWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
 }
 
 /**
- * 客户端（纯前端）模式面板：浏览器直连 WebDAV。
+ * 客户端（纯前端）模式面板：WebDAV 请求一律经本应用后端 `/api/webdav` 转发（M12 §1）。
  * 复用 `lib/webdav`、`lib/cloud-backup` 与 `lib/cloud-auto`，凭据只存本机。
  */
 function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }) {
@@ -355,7 +347,6 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
   const reminders = useReminderStore((state) => state.reminders);
   const tags = useReminderStore((state) => state.tags);
   const importData = useReminderStore((state) => state.importData);
-  const serverReachable = useReminderStore((state) => state.serverReachable);
 
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState<'test' | 'upload' | 'list' | 'restore' | 'delete' | null>(null);
@@ -365,9 +356,6 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
 
   const disabled = !settings.webdavEnabled;
   const working = busy !== null;
-  const preference = parseTransportPreference(settings.webdavTransport);
-  const transport = resolveWebDavTransport(preference, serverReachable);
-  const deps = { transport };
 
   const ensureConfigured = (): boolean => {
     if (settings.webdavServer.trim() === '') {
@@ -383,9 +371,9 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
     if (!ensureConfigured()) return;
     setBusy('test');
     try {
-      await testConnection(webDavConfigFrom(settings), deps);
+      await testConnection(webDavConfigFrom(settings));
       await updateSettings({ webdavLastResult: '连接正常' });
-      onNotice(`连接正常（${transportExplanation(transport)}）`);
+      onNotice('连接正常');
     } catch (error) {
       const message = errorMessage(error);
       await updateSettings({ webdavLastResult: `连接失败：${message}` });
@@ -399,7 +387,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
     if (!ensureConfigured()) return;
     setBusy('upload');
     try {
-      const outcome = await uploadCurrentBackup({ reminders, tags, settings }, deps);
+      const outcome = await uploadCurrentBackup({ reminders, tags, settings });
       const suffix = outcome.pruned > 0 ? `，已清理 ${outcome.pruned} 份旧备份` : '';
       await updateSettings({
         webdavLastSuccessAt: Date.now(),
@@ -419,7 +407,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
     if (!ensureConfigured()) return;
     setBusy('list');
     try {
-      const next = await listCloudBackups(settings, deps);
+      const next = await listCloudBackups(settings);
       setFiles(next);
       if (next.length === 0) onNotice('云端还没有备份');
     } catch (error) {
@@ -432,7 +420,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
   const confirmRestore = async (file: WebDavFile) => {
     setBusy('restore');
     try {
-      const result = await restoreCloudBackup(settings, file.name, deps);
+      const result = await restoreCloudBackup(settings, file.name);
       await importData({ reminders: result.reminders, tags: result.tags, settings: result.settings });
       onNotice(`已恢复 ${result.reminders.length} 条提醒、${result.tags.length} 个标签、${result.imageCount} 张图片。`);
     } catch (error) {
@@ -445,7 +433,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
   const confirmDelete = async (file: WebDavFile) => {
     setBusy('delete');
     try {
-      await deleteCloudBackup(settings, file.name, deps);
+      await deleteCloudBackup(settings, file.name);
       setFiles((current) => (current === null ? current : current.filter((entry) => entry.name !== file.name)));
       onNotice('已删除该云端备份');
     } catch (error) {
@@ -457,7 +445,9 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
 
   return (
     <>
-      <p className={styles.groupNote}>浏览器直连你的 WebDAV 服务器；地址与口令只保存在本机，不会上传服务器。</p>
+      <p className={styles.groupNote}>
+        地址与口令只保存在本机；转发时随请求发给本应用服务器，不落库、不写日志。
+      </p>
 
       <div className={styles.switchRow}>
         <div className={styles.rowText}>
@@ -471,30 +461,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
         />
       </div>
 
-      <div className={styles.field}>
-        <label className={styles.fieldLabel} htmlFor="webdav-transport">
-          WebDAV 连接方式
-        </label>
-        <select
-          id="webdav-transport"
-          className={styles.select}
-          value={preference}
-          disabled={disabled}
-          onChange={(event) =>
-            void updateSettings({ webdavTransport: event.target.value as WebDavTransportPreference })
-          }
-        >
-          {WEBDAV_TRANSPORT_PREFERENCES.map((value) => (
-            <option key={value} value={value}>
-              {transportPreferenceLabel(value)}
-            </option>
-          ))}
-        </select>
-        <span className={styles.fieldHint}>
-          当前实际使用：{transportExplanation(transport)}
-          {preference === 'auto' && !serverReachable ? '（未检测到后端服务）' : ''}
-        </span>
-      </div>
+      <p className={styles.fieldHint}>WebDAV 请求经本应用服务器转发，因此浏览器不受跨域限制。</p>
 
       <label className={styles.field}>
         <span className={styles.fieldLabel}>服务器地址</span>
@@ -655,7 +622,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
 /**
  * 「WebDAV 云备份」分组（M10 §1）：
  * - 服务器模式：M9 服务端策略面板（不出现地址 / 用户名 / 口令输入框）；
- * - 客户端模式（纯前端）：浏览器直连 WebDAV（地址 / 用户名 / 口令 / 自动备份 / 保留份数 / 测试 / 备份 / 恢复 / 列表）。
+ * - 客户端模式（纯前端）：WebDAV 请求经本应用服务器转发（地址 / 用户名 / 口令 / 自动备份 / 保留份数 / 测试 / 备份 / 恢复 / 列表）。
  */
 export function WebDavSettings({ onNotice, mode: modeProp }: { onNotice: (message: string) => void; mode?: StorageMode }) {
   const storeMode = useReminderStore((state) => state.mode);

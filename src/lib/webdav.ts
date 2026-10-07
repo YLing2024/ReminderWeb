@@ -1,14 +1,14 @@
 /**
- * WebDAV 客户端（需求 M4 §4）。
+ * WebDAV 客户端（需求 M4 §4 / M12 §1）。
  *
- * 纯 `fetch` 实现：PROPFIND / MKCOL / PUT / GET / DELETE + Basic 认证；
+ * 客户端模式的 WebDAV 访问**只走**本应用后端的 `/api/webdav` 转发（M12 §1），
+ * 因此浏览器不受跨域限制：目标地址与凭据仅随本次请求发给后端，不落库、不写日志。
  * XML 解析用浏览器原生 `DOMParser`，不引入任何第三方库与运行时依赖。
  *
  * 该模块不触碰 IndexedDB 与 React，只负责「按 URL 说话」，方便单测 mock `fetch`。
  * 所有对外抛出的错误都是 `WebDavError`，其 `message` 已是可直接展示的中文文案。
  */
 import { apiBase, requestCredentials } from './api';
-import type { WebDavTransport } from './webdav-transport';
 
 /** 每个请求的超时（毫秒）。 */
 export const WEBDAV_TIMEOUT_MS = 15_000;
@@ -41,13 +41,9 @@ export interface WebDavFile {
 export interface WebDavDeps {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
-  /** 当前页面来源，用于判断是否跨域；缺省读 `window.location.origin`。 */
-  pageOrigin?: string;
   /** 固定「现在」，便于测试产物确定。 */
   now?: () => Date;
-  /** 连接方式：直连或经后端同源代理（M11 §3.2）。默认直连。 */
-  transport?: WebDavTransport;
-  /** 覆盖后端地址前缀（同源代理用，测试注入）。 */
+  /** 覆盖后端地址前缀（测试注入）。 */
   apiBase?: string;
 }
 
@@ -57,7 +53,6 @@ export type WebDavErrorCode =
   | 'NOT_FOUND'
   | 'NOT_WEBDAV'
   | 'NETWORK'
-  | 'CORS'
   | 'HTTP'
   | 'INVALID_BACKUP';
 
@@ -98,12 +93,6 @@ export function normalizeBaseUrl(raw: string): string {
 /** 拼接 base 目录与文件名。 */
 export function joinUrl(base: string, name: string): string {
   return `${base}${encodeURIComponent(name)}`;
-}
-
-/** Basic 认证头；用 `btoa(unescape(encodeURIComponent(...)))` 兼容非 ASCII 口令。 */
-export function buildAuthHeader(username: string, password: string): string {
-  const raw = `${username}:${password}`;
-  return `Basic ${btoa(unescape(encodeURIComponent(raw)))}`;
 }
 
 function localName(element: Element): string {
@@ -196,44 +185,15 @@ export function mapHttpError(status: number): WebDavError {
   return new WebDavError('HTTP', `服务器返回 ${status}`, status);
 }
 
-function getPageOrigin(): string | undefined {
-  const location = (globalThis as { location?: { origin?: string } }).location;
-  return location?.origin;
-}
-
-function isCrossOrigin(url: string, pageOrigin: string | undefined): boolean {
-  const origin = pageOrigin ?? getPageOrigin();
-  if (origin === undefined || origin === '') return false;
-  try {
-    return new URL(url).origin !== new URL(origin).origin;
-  } catch {
-    return false;
-  }
-}
-
-/** fetch 层异常（网络 / 超时 / CORS）→ 中文错误。 */
-export function mapFetchError(
-  error: unknown,
-  opts: { url: string; pageOrigin?: string; transport?: 'direct' | 'proxy' },
-): WebDavError {
+/**
+ * fetch 层异常 → 中文错误。
+ *
+ * 客户端模式一律经本应用后端转发，因此浏览器的跨域限制不适用；
+ * 这里只可能是「连不上本应用服务器」，给出可直接照做的提示，而不是 `TypeError: Failed to fetch`。
+ */
+export function mapFetchError(error: unknown): WebDavError {
   if (error instanceof WebDavError) return error;
-  const name = error instanceof Error ? error.name : '';
-  if (name === 'AbortError') {
-    return new WebDavError('NETWORK', '连不上服务器，请检查地址与网络');
-  }
-  const message = error instanceof Error ? error.message : '';
-  const looksLikeFetchFailure =
-    error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(message);
-  if (opts.transport === 'proxy') {
-    return new WebDavError('NETWORK', '连不上应用服务器（同源代理不可用），可在设置里改用「直连」');
-  }
-  if (looksLikeFetchFailure && isCrossOrigin(opts.url, opts.pageOrigin)) {
-    return new WebDavError(
-      'CORS',
-      '浏览器被跨域策略拦住了。可以改用「经服务器转发」，或在 WebDAV 服务的管理页面把本站加入跨域白名单。',
-    );
-  }
-  return new WebDavError('NETWORK', '连不上服务器，请检查地址与网络');
+  return new WebDavError('NETWORK', '客户端模式的 WebDAV 备份需要本应用服务器在运行（用于转发请求）。');
 }
 
 async function send(
@@ -246,40 +206,28 @@ async function send(
 ): Promise<Response> {
   const fetchImpl = deps.fetchImpl ?? (globalThis.fetch as typeof fetch | undefined);
   if (typeof fetchImpl !== 'function') {
-    throw new WebDavError('NETWORK', '连不上服务器，请检查地址与网络');
+    throw new WebDavError('NETWORK', '客户端模式的 WebDAV 备份需要本应用服务器在运行（用于转发请求）。');
   }
   const controller = new AbortController();
   const timeoutMs = deps.timeoutMs ?? WEBDAV_TIMEOUT_MS;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const transport = deps.transport ?? 'direct';
   try {
-    if (transport === 'proxy') {
-      // 同源代理：目标地址与凭据仅随本次请求发给后端转发，不落库。
-      const base = deps.apiBase ?? apiBase();
-      return await fetchImpl(`${base}/api/webdav`, {
-        method,
-        credentials: requestCredentials(base),
-        headers: {
-          'X-Dav-Url': url,
-          'X-Dav-User': config.username,
-          'X-Dav-Password': config.password,
-          ...headers,
-        },
-        body: body ?? null,
-        signal: controller.signal,
-      });
-    }
-    return await fetchImpl(url, {
+    // 一律经本应用后端转发：目标地址与凭据仅随本次请求发给后端，不落库、不写日志。
+    const base = deps.apiBase ?? apiBase();
+    return await fetchImpl(`${base}/api/webdav`, {
       method,
+      credentials: requestCredentials(base),
       headers: {
-        Authorization: buildAuthHeader(config.username, config.password),
+        'X-Dav-Url': url,
+        'X-Dav-User': config.username,
+        'X-Dav-Password': config.password,
         ...headers,
       },
       body: body ?? null,
       signal: controller.signal,
     });
   } catch (error) {
-    throw mapFetchError(error, { url, pageOrigin: deps.pageOrigin, transport });
+    throw mapFetchError(error);
   } finally {
     clearTimeout(timer);
   }
