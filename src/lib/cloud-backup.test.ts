@@ -5,7 +5,7 @@
  * 通过 mock `./storage` 把 IndexedDB 依赖摘掉，其余全部走真实代码路径。
  */
 import { describe, expect, it, vi } from 'vitest';
-import { decodeArchive } from './backup';
+import { decodeArchive, BackupError } from './backup';
 import { exportBackup } from './backup-service';
 import { listCloudBackups, restoreCloudBackup, uploadCurrentBackup } from './cloud-backup';
 import { DEFAULT_SETTINGS } from './storage';
@@ -170,6 +170,17 @@ describe('WebDAV 云备份集成（内存服务端）', () => {
     expect(second.pruned).toBe(1);
     expect([...server.files.keys()]).toEqual([second.fileName]);
     expect(server.deletes).toContain('reminder-backup-20261007-161503.zip');
+  });
+
+  it('云端文件不是有效备份包时报可读错误', async () => {
+    const server = createMemoryWebDavServer();
+    server.files.set('reminder-backup-20260101-000000.zip', {
+      bytes: new Uint8Array([1, 2, 3, 4, 5]),
+      lastModified: 1,
+    });
+    await expect(
+      restoreCloudBackup(BASE_SETTINGS, 'reminder-backup-20260101-000000.zip', { fetchImpl: server.fetchImpl }),
+    ).rejects.toBeInstanceOf(BackupError);
   });
 
   it('导出的备份包不含 WebDAV 凭据', async () => {

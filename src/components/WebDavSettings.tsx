@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ConfirmDialog, Toggle } from './ui';
+import { BackupError } from '../lib/backup';
 import { listCloudBackups, restoreCloudBackup, uploadCurrentBackup, webDavConfigFrom } from '../lib/cloud-backup';
 import { testConnection, type WebDavFile } from '../lib/webdav';
 import { useReminderStore } from '../store/useReminderStore';
@@ -109,7 +110,7 @@ export function WebDavSettings({ onNotice }: { onNotice: (message: string) => vo
         `已恢复 ${result.reminders.length} 条提醒、${result.tags.length} 个标签、${result.imageCount} 张图片。`,
       );
     } catch (error) {
-      onNotice(`恢复失败：${errorMessage(error)}`);
+      onNotice(`恢复失败：${error instanceof BackupError ? '该文件不是有效的备份包' : errorMessage(error)}`);
     } finally {
       setBusy(null);
     }
