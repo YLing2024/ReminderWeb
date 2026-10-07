@@ -4,6 +4,7 @@ import { ArrowBackIcon, StorageIcon } from '../components/icons';
 import { ConfirmDialog, IconButton, Toggle } from '../components/ui';
 import { BackupError } from '../lib/backup';
 import { exportBackup, importBackup } from '../lib/backup-service';
+import { downloadBlob } from '../lib/download';
 import { useReminderStore } from '../store/useReminderStore';
 import styles from './BackupPage.module.css';
 
@@ -32,14 +33,7 @@ export default function BackupPage() {
     setNotice(null);
     try {
       const result = await exportBackup(reminders, tags, settings, settings.backupEncryptionEnabled);
-      const url = URL.createObjectURL(result.blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = result.fileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      downloadBlob(result.blob, result.fileName);
       await updateSettings({ lastBackupAt: Date.now() });
       setNotice(
         `已导出 ${result.fileName}（${settings.backupEncryptionEnabled ? '加密' : '未加密'}，含 ${result.imageCount} 张图片）`,
