@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowBackIcon, DeleteIcon, EditIcon, PinIcon, ShareIcon } from '../components/icons';
 import { ConfirmDialog, IconButton } from '../components/ui';
 import { reminderDisplayInfo } from '../lib/display';
+import { readableTextOn } from '../lib/contrast';
 import { calculateBirthdayInfo } from '../lib/birthday';
 import { parseLocalDate, todayLocalDate } from '../lib/local-date';
 import type { ReminderType } from '../types/reminder';
@@ -80,7 +81,9 @@ export default function DetailPage() {
         >
           <div className={`${styles.face} ${styles.front}`}>
             <div className={styles.band} style={{ background: bandColor }}>
-              <span className={styles.bandText}>{info.headerTitle}</span>
+              <span className={styles.bandText} style={{ color: readableTextOn(bandColor) }}>
+                {info.headerTitle}
+              </span>
             </div>
             <div className={styles.body}>
               <span className={styles.number}>{info.isToday ? '今' : info.dayCount}</span>

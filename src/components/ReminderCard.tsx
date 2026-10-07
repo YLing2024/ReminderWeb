@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import type { ReminderItem, ReminderType } from '../types/reminder';
 import { reminderDisplayInfo } from '../lib/display';
+import { readableTextOn } from '../lib/contrast';
 import type { LocalDate } from '../lib/local-date';
 import styles from './ReminderCard.module.css';
 
@@ -42,6 +43,9 @@ export function ReminderCard({
 }) {
   const info = reminderDisplayInfo(item, today, item.isLunar, true);
   const reference = splitReference(info.referenceText);
+  // 浅色标签色时白字对比度不足，自动改用深色文字，保证 ≥4.5:1。
+  const bandColor = resolveBandColor(item, tagColor);
+  const bandTextColor = readableTextOn(bandColor);
   const pressTimer = useRef<number | null>(null);
   const longPressed = useRef(false);
   const startPoint = useRef<{ x: number; y: number } | null>(null);
@@ -93,8 +97,13 @@ export function ReminderCard({
       onPointerCancel={clearTimer}
       onPointerLeave={clearTimer}
     >
-      <div className={styles.band} style={{ background: resolveBandColor(item, tagColor) }}>
-        <span className={styles.bandText}>{info.headerTitle}</span>
+      <div className={styles.band} style={{ background: bandColor }}>
+        <span
+          className={styles.bandText}
+          style={{ color: bandTextColor, textShadow: bandTextColor === '#ffffff' ? undefined : 'none' }}
+        >
+          {info.headerTitle}
+        </span>
       </div>
       <div className={styles.body}>
         <span className={styles.number}>{info.isToday ? '今' : info.dayCount}</span>
