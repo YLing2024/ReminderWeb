@@ -6,6 +6,9 @@ import styles from './AboutPage.module.css';
 /** 应用版本，与 package.json 保持一致。 */
 const APP_VERSION = '0.1.0';
 
+/** 源码仓库（公开地址，非私有域名）。 */
+const REPO_URL = 'https://github.com/YLing2024/ReminderWeb';
+
 interface LicenseEntry {
   name: string;
   license: string;
@@ -84,6 +87,13 @@ export default function AboutPage() {
               </li>
             ))}
           </ul>
+        </section>
+
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>仓库</h2>
+          <a className={styles.link} href={REPO_URL} target="_blank" rel="noreferrer">
+            源码与问题反馈
+          </a>
         </section>
       </div>
     </div>

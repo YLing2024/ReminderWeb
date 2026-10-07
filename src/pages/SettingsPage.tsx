@@ -263,6 +263,15 @@ export default function SettingsPage() {
               checked={settings.notificationEnabled}
               onChange={(value) => void onToggleNotification(value)}
             />
+            {settings.notificationEnabled &&
+              typeof Notification !== 'undefined' &&
+              Notification.permission !== 'granted' && (
+                <p className={styles.rowDesc}>
+                  {Notification.permission === 'denied'
+                    ? '通知权限已被拒绝，请到浏览器站点设置里重新允许。'
+                    : '尚未授予通知权限，点击上方开关以申请。'}
+                </p>
+              )}
             <div className={styles.subBlock}>
               <p className={styles.rowTitle}>默认提前天数</p>
               <p className={styles.rowDesc}>新建提醒时提醒时刻的默认提前量</p>
