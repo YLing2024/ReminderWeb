@@ -46,6 +46,7 @@ declare class URL {
   username: string;
   password: string;
   host: string;
+  hostname: string;
   origin: string;
   hash: string;
   search: string;
@@ -70,6 +71,7 @@ interface RequestInit {
   headers?: Record<string, string>;
   body?: string | Uint8Array | ArrayBuffer | null;
   signal?: unknown;
+  redirect?: string;
 }
 
 declare function fetch(input: string, init?: RequestInit): Promise<Response>;

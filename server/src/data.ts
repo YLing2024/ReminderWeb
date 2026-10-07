@@ -10,6 +10,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { bumpRevision, getRevision } from './db.ts';
+import { replaceAllImages, type StoredImage } from './images.ts';
 import {
   fromStorageItem,
   toStorageItem,
@@ -324,6 +325,48 @@ function upsertKind(db: DatabaseSync, table: 'reminders' | 'tags', outcome: Merg
   }
   for (const tomb of tombstones) {
     stmt.run(tomb.id, JSON.stringify({ id: tomb.id, updatedAt: tomb.updatedAt }), tomb.updatedAt, 1);
+  }
+}
+
+/** 整库替换写入输入（M11 §2）。 */
+export interface ReplaceDatabaseInput {
+  reminders: WireItem[];
+  tags: WireItem[];
+  settings: SettingsEnvelope;
+  images: StoredImage[];
+}
+
+/**
+ * 用请求体**整体替换**服务端全部数据（提醒 / 标签 / 设置 / 卡片背景图字节）。
+ *
+ * 与按 `updatedAt` / 墓碑合并的 `writeMergedData` 完全分开：
+ * 先清空四张表，再原样写入，最后 revision 自增一次。整个操作在一个事务里完成，
+ * 任何一步失败都 `ROLLBACK`，绝不出现半库状态。
+ */
+export function replaceServerData(db: DatabaseSync, input: ReplaceDatabaseInput, at = Date.now()): number {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.exec('DELETE FROM reminders; DELETE FROM tags; DELETE FROM settings; DELETE FROM images;');
+    const reminderStmt = db.prepare('INSERT INTO reminders (id, payload, updated_at, deleted) VALUES (?, ?, ?, 0)');
+    for (const item of input.reminders) {
+      reminderStmt.run(item.id, JSON.stringify(toStorageItem(item)), item.updatedAt);
+    }
+    const tagStmt = db.prepare('INSERT INTO tags (id, payload, updated_at, deleted) VALUES (?, ?, ?, 0)');
+    for (const item of input.tags) {
+      tagStmt.run(item.id, JSON.stringify(toStorageItem(item)), item.updatedAt);
+    }
+    db.prepare('INSERT INTO settings (k, payload, updated_at) VALUES (?, ?, ?)').run(
+      'app',
+      JSON.stringify(input.settings),
+      input.settings.updatedAt,
+    );
+    replaceAllImages(db, input.images, at);
+    const revision = bumpRevision(db);
+    db.exec('COMMIT');
+    return revision;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
   }
 }
 

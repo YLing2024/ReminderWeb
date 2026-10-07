@@ -11,9 +11,18 @@ import type { DatabaseSync } from 'node:sqlite';
 import { clientIp, resolveIdentity, type Identity, type RateLimiter } from './auth.ts';
 import type { Config } from './config.ts';
 import { createLogger, type Logger } from './log.ts';
-import { handleGetData, handlePutData } from './routes/data.ts';
+import {
+  handleDeleteImage,
+  handleGetData,
+  handleGetFullData,
+  handleGetImage,
+  handlePutData,
+  handlePutImage,
+  handlePutReplace,
+} from './routes/data.ts';
 import { handleLogin, handleLogout, handleMe } from './routes/auth.ts';
 import { handleHealth, handleVersion } from './routes/health.ts';
+import { handleWebDavRelay } from './routes/webdav-relay.ts';
 import {
   handleSyncConfigGet,
   handleSyncConfigPut,
@@ -28,6 +37,10 @@ import type { SyncEngine } from './sync.ts';
 
 /** 请求体大小上限：2 MiB（需求 §6.2）。 */
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
+/** 整库替换（`PUT /api/data/replace`）允许的上限：32 MiB（含 base64 图片）。 */
+export const MAX_REPLACE_BODY_BYTES = 32 * 1024 * 1024;
+/** WebDAV 转发请求体上限：64 MiB（备份包可能较大）。 */
+export const MAX_RELAY_BODY_BYTES = 64 * 1024 * 1024;
 
 /** 跨域预检允许的方法与头（前后端分离部署，M10 §2）。 */
 const CORS_ALLOW_METHODS = 'GET, PUT, POST, DELETE, OPTIONS';
@@ -69,6 +82,8 @@ export interface RouteContext {
   path: string;
   headers: Record<string, string | string[] | undefined>;
   body: unknown;
+  /** 原始请求体字节（WebDAV 转发 / 图片上传用）；其余路由为 undefined。 */
+  rawBody?: Uint8Array;
   identity: Identity | null;
   config: Config;
   db: DatabaseSync;
@@ -81,9 +96,11 @@ export interface RouteContext {
 
 export interface RouteResponse {
   status: number;
-  body: unknown;
+  body?: unknown;
   headers?: Record<string, string>;
   cookies?: string[];
+  /** 原始字节响应（WebDAV 转发 / 图片读取用）；存在时忽略 body。 */
+  rawBody?: Uint8Array;
 }
 
 export type RouteHandler = (ctx: RouteContext) => RouteResponse | Promise<RouteResponse>;
@@ -175,6 +192,35 @@ export function readJsonBody(req: IncomingMessage, limit = MAX_BODY_BYTES): Prom
   });
 }
 
+/** 读取原始请求体（WebDAV 转发 / 图片上传用），超过上限抛 413。 */
+export function readRawBody(req: IncomingMessage, limit = MAX_BODY_BYTES): Promise<Uint8Array> {
+  return new Promise((resolvePromise, reject) => {
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      fn();
+    };
+    req.on('data', (chunk: Uint8Array) => {
+      if (settled) return;
+      size += chunk.length;
+      if (size > limit) {
+        finish(() => reject(new HttpError(413, 'payload_too_large')));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      finish(() => resolvePromise(Buffer.concat(chunks)));
+    });
+    req.on('error', () => {
+      finish(() => reject(new HttpError(400, 'invalid_body')));
+    });
+  });
+}
+
 function decodePathname(pathname: string): string | null {
   try {
     return decodeURIComponent(pathname);
@@ -246,7 +292,17 @@ async function dispatch(ctx: RouteContext): Promise<RouteResponse> {
   if (key === 'POST /api/auth/logout') return handleLogout(ctx);
   if (key === 'GET /api/auth/me') return handleMe(ctx);
   if (key === 'GET /api/data') return handleGetData(ctx);
+  if (key === 'GET /api/data/full') return handleGetFullData(ctx);
   if (key === 'PUT /api/data') return handlePutData(ctx);
+  if (key === 'PUT /api/data/replace') return handlePutReplace(ctx);
+  if (ctx.path.startsWith('/api/images/')) {
+    if (ctx.method === 'PUT') return handlePutImage(ctx);
+    if (ctx.method === 'GET') return handleGetImage(ctx);
+    if (ctx.method === 'DELETE') return handleDeleteImage(ctx);
+  }
+  if (ctx.path === '/api/webdav' || ctx.path.startsWith('/api/webdav/')) {
+    return handleWebDavRelay(ctx);
+  }
   if (key === 'GET /api/sync/config') return handleSyncConfigGet(ctx);
   if (key === 'PUT /api/sync/config') return handleSyncConfigPut(ctx);
   if (key === 'GET /api/sync/status') return handleSyncStatus(ctx);
@@ -256,6 +312,33 @@ async function dispatch(ctx: RouteContext): Promise<RouteResponse> {
   if (key === 'POST /api/sync/restore') return handleSyncRestore(ctx);
   if (ctx.method === 'DELETE' && ctx.path.startsWith('/api/sync/files/')) return handleSyncDeleteFile(ctx);
   return { status: 404, body: { error: 'not_found' } };
+}
+
+/** 写响应：原始字节响应走 `rawBody`，其余统一 JSON。 */
+function sendResponse(res: ServerResponse, response: RouteResponse): void {
+  if (response.rawBody !== undefined) {
+    res.statusCode = response.status;
+    if (response.headers !== undefined) {
+      for (const [name, value] of Object.entries(response.headers)) res.setHeader(name, value);
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(response.rawBody);
+    return;
+  }
+  sendJson(res, response.status, response.body, response.cookies);
+}
+
+/** 按路由选择请求体上限：整库替换与图片上传更宽松；其余保持 2 MiB。 */
+function bodyLimitFor(method: string, path: string): number {
+  if (method === 'PUT' && path === '/api/data/replace') return MAX_REPLACE_BODY_BYTES;
+  if (path === '/api/webdav' || path.startsWith('/api/webdav/')) return MAX_RELAY_BODY_BYTES;
+  return MAX_BODY_BYTES;
+}
+
+function isBinaryBodyRoute(method: string, path: string): boolean {
+  if (path === '/api/webdav' || path.startsWith('/api/webdav/')) return true;
+  return path.startsWith('/api/images/') && (method === 'PUT' || method === 'POST');
 }
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse, options: AppOptions): Promise<void> {
@@ -285,9 +368,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, options:
   }
 
   const key = routeKey(method, path);
+  const limit = bodyLimitFor(method, path);
   let body: unknown = undefined;
-  if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
-    body = await readJsonBody(req);
+  let rawBody: Uint8Array | undefined;
+  if (isBinaryBodyRoute(method, path)) {
+    rawBody = await readRawBody(req, limit);
+  } else if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+    body = await readJsonBody(req, limit);
   }
 
   const identity = PUBLIC_ROUTES.has(key) ? null : resolveIdentity(req.headers, { mode: options.config.authMode, db: options.db });
@@ -301,6 +388,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, options:
     path,
     headers: req.headers,
     body,
+    rawBody,
     identity,
     config: options.config,
     db: options.db,
@@ -310,7 +398,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, options:
     sync: options.sync ?? null,
   };
   const response = await dispatch(ctx);
-  sendJson(res, response.status, response.body, response.cookies);
+  sendResponse(res, response);
 }
 
 /** 创建 HTTP 服务器（不自动 listen，便于测试用端口 0）。 */

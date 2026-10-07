@@ -6,6 +6,7 @@
  *
  * 所有函数均为纯函数，便于单测。
  */
+import { isValidImageName, MAX_IMAGE_BYTES } from './images.ts';
 
 export type ItemKind = 'reminder' | 'tag';
 
@@ -189,6 +190,80 @@ export function parseClientData(raw: unknown): ClientData {
     tags: parseItemList(raw.tags, 'tag', rejected),
     settings,
     tombstones: parseTombstoneList(raw.tombstones, rejected),
+    rejected: rejected.count,
+  };
+}
+
+/** 整库替换请求体里的图片条目（base64 传输）。 */
+export interface ReplaceImage {
+  name: string;
+  bytes: Uint8Array;
+}
+
+/** `PUT /api/data/replace` 的解析结果。 */
+export interface ReplaceData {
+  reminders: WireItem[];
+  tags: WireItem[];
+  settings: SettingsEnvelope;
+  images: ReplaceImage[];
+  /** 因形状非法被丢弃的条目 / 图片数。 */
+  rejected: number;
+}
+
+function decodeBase64(value: string): Uint8Array | null {
+  try {
+    // Buffer 的 base64 解码容忍空白；非法字符会被忽略，因此额外做长度合理性检查。
+    return new Uint8Array(Buffer.from(value, 'base64'));
+  } catch {
+    return null;
+  }
+}
+
+function parseReplaceImages(raw: unknown, rejected: { count: number }): ReplaceImage[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    rejected.count += 1;
+    return [];
+  }
+  const out: ReplaceImage[] = [];
+  for (const entry of raw) {
+    if (!isRecord(entry) || typeof entry.name !== 'string' || typeof entry.data !== 'string') {
+      rejected.count += 1;
+      continue;
+    }
+    if (!isValidImageName(entry.name)) {
+      rejected.count += 1;
+      continue;
+    }
+    const bytes = decodeBase64(entry.data);
+    if (bytes === null || bytes.length > MAX_IMAGE_BYTES) {
+      rejected.count += 1;
+      continue;
+    }
+    out.push({ name: entry.name, bytes });
+  }
+  return out;
+}
+
+/**
+ * 解析 `PUT /api/data/replace` 请求体（整库覆盖，M11 §2）。
+ * 与 `parseClientData` 分离：这里不做增量合并语义，条目要求 `updatedAt`，
+ * `settings` 缺省视为空信封（整体替换后即为空设置）。
+ */
+export function parseReplaceData(raw: unknown): ReplaceData {
+  if (!isRecord(raw)) {
+    return { reminders: [], tags: [], settings: { value: {}, updatedAt: 0 }, images: [], rejected: 1 };
+  }
+  const rejected = { count: 0 };
+  const settings = raw.settings === undefined || raw.settings === null ? { value: {}, updatedAt: 0 } : parseSettingsEnvelope(raw.settings);
+  if (settings === null) {
+    rejected.count += 1;
+  }
+  return {
+    reminders: parseItemList(raw.reminders, 'reminder', rejected),
+    tags: parseItemList(raw.tags, 'tag', rejected),
+    settings: settings ?? { value: {}, updatedAt: 0 },
+    images: parseReplaceImages(raw.images, rejected),
     rejected: rejected.count,
   };
 }
