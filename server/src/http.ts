@@ -14,6 +14,8 @@ import { createLogger, type Logger } from './log.ts';
 import { handleGetData, handlePutData } from './routes/data.ts';
 import { handleLogin, handleLogout, handleMe } from './routes/auth.ts';
 import { handleHealth, handleVersion } from './routes/health.ts';
+import { handleSyncNow, handleSyncStatus } from './routes/sync.ts';
+import type { SyncEngine } from './sync.ts';
 
 /** 请求体大小上限：2 MiB（需求 §6.2）。 */
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -42,6 +44,8 @@ export interface RouteContext {
   now: number;
   ip: string;
   rateLimiter: RateLimiter;
+  /** WebDAV 同步引擎；未启用为 null。 */
+  sync: SyncEngine | null;
 }
 
 export interface RouteResponse {
@@ -59,6 +63,7 @@ export interface AppOptions {
   rateLimiter: RateLimiter;
   now?: () => number;
   logger?: Logger;
+  sync?: SyncEngine | null;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -211,6 +216,8 @@ async function dispatch(ctx: RouteContext): Promise<RouteResponse> {
   if (key === 'GET /api/auth/me') return handleMe(ctx);
   if (key === 'GET /api/data') return handleGetData(ctx);
   if (key === 'PUT /api/data') return handlePutData(ctx);
+  if (key === 'GET /api/sync/status') return handleSyncStatus(ctx);
+  if (key === 'POST /api/sync/now') return handleSyncNow(ctx);
   return { status: 404, body: { error: 'not_found' } };
 }
 
@@ -249,6 +256,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, options:
     now: options.now?.() ?? Date.now(),
     ip: clientIp(req.headers, req.socket?.remoteAddress, options.config.trustProxy),
     rateLimiter: options.rateLimiter,
+    sync: options.sync ?? null,
   };
   const response = await dispatch(ctx);
   sendJson(res, response.status, response.body, response.cookies);

@@ -9,6 +9,7 @@ import { describeConfig, loadConfig, type Config } from './config.ts';
 import { openDatabase } from './db.ts';
 import { createAppServer } from './http.ts';
 import { createLogger } from './log.ts';
+import { SyncEngine } from './sync.ts';
 
 function boot(): void {
   let config: Config;
@@ -37,7 +38,9 @@ function boot(): void {
   }
 
   const rateLimiter = createRateLimiter({ limit: config.loginRateLimit });
-  const server: Server = createAppServer({ config, db, rateLimiter, logger });
+  const sync = config.webdavEnabled ? new SyncEngine(config, db, logger) : null;
+  const server: Server = createAppServer({ config, db, rateLimiter, logger, sync });
+  sync?.start();
 
   server.on('error', (error: unknown) => {
     logger.error(`服务器错误：${error instanceof Error ? error.message : '未知错误'}`);
@@ -53,6 +56,7 @@ function boot(): void {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info(`收到 ${signal}，正在关闭…`);
+    sync?.stop();
     server.close(() => {
       db.close();
       logger.info('已停止。');

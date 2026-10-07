@@ -30,6 +30,8 @@ export function handlePutData(ctx: RouteContext): RouteResponse {
     tombstones: client.tombstones,
   });
   const revision = writeMergedData(ctx.db, outcome);
+  // 本机数据变更 → 触发 WebDAV 延迟上传（节流，未启用时不生效）。
+  if (outcome.changed) ctx.sync?.markLocalChange();
   const actor = ctx.identity?.username ?? 'unknown';
   ctx.db
     .prepare('INSERT INTO audit (at, actor, action, detail) VALUES (?, ?, ?, ?)')
