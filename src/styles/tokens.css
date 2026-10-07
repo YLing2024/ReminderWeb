@@ -1,0 +1,53 @@
+/* M3 将按种子色用 material-color-utilities 生成整板；M1 先落基线色板。 */
+:root {
+  --md-sys-color-primary: #6750a4;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #eaddff;
+  --md-sys-color-on-primary-container: #21005d;
+  --md-sys-color-surface: #f7f5fa;
+  --md-sys-color-on-surface: #1d1b20;
+  --md-sys-color-surface-variant: #e7e0ec;
+  --md-sys-color-on-surface-variant: #49454f;
+  --md-sys-color-outline: #79747e;
+  --md-sys-color-error: #b3261e;
+
+  --app-page-bg: var(--md-sys-color-surface);
+  --app-tint: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  --app-tint-strong: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+
+  --radius-card: 22px;
+  --radius-group: 24px;
+  --radius-pill: 20px;
+  --radius-input: 8px;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06);
+
+  --space-page-x: 16px;
+  --content-max: 1200px;
+}
+
+@media (min-width: 600px) {
+  :root {
+    --space-page-x: 24px;
+    --content-max: 900px;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --content-max: 1200px;
+  }
+}
+
+[data-theme='dark'] {
+  --md-sys-color-primary: #d0bcff;
+  --md-sys-color-on-primary: #381e72;
+  --md-sys-color-primary-container: #4f378b;
+  --md-sys-color-on-primary-container: #eaddff;
+  --md-sys-color-surface: #1c1b1f;
+  --md-sys-color-on-surface: #e6e1e5;
+  --md-sys-color-surface-variant: #49454f;
+  --md-sys-color-on-surface-variant: #cac4d0;
+  --md-sys-color-outline: #938f99;
+  --md-sys-color-error: #f2b8b5;
+}
