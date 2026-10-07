@@ -51,10 +51,18 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
 // SPA 深链：离线时导航请求回退到已预缓存的 index.html。
 self.addEventListener('fetch', (event: FetchEvent) => {
   if (event.request.mode !== 'navigate') return;
+  const url = new URL(event.request.url);
+  // 精确 /index.html 交给 workbox 预缓存，避免重复 respondWith。
+  if (url.pathname.endsWith('/index.html')) return;
   event.respondWith(
-    fetch(event.request).catch(async () => {
-      const cached = await caches.match('/index.html');
-      return cached ?? Response.error();
-    }),
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok) return response;
+        return caches.match('/index.html').then((cached) => cached ?? response);
+      })
+      .catch(async () => {
+        const cached = await caches.match('/index.html');
+        return cached ?? Response.error();
+      }),
   );
 });
