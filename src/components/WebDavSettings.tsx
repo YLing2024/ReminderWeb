@@ -557,7 +557,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
         <div className={styles.field}>
           <span className={styles.fieldLabel}>云端备份列表</span>
           <CloudBackupList
-            files={files}
+            files={files.map((file) => ({ name: file.name, size: file.size, modifiedAt: file.lastModified }))}
             busy={working}
             onRestore={(entry) => setPendingRestore({ name: entry.name, size: entry.size, lastModified: entry.modifiedAt })}
             onDelete={(entry) => setPendingDelete({ name: entry.name, size: entry.size, lastModified: entry.modifiedAt })}
