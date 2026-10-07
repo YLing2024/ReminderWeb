@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppLockGate } from './components/AppLockGate';
 import { ErrorBoundary, UnhandledErrorNotice } from './components/ErrorBoundary';
 import { LunarGate } from './components/LunarGate';
@@ -20,6 +20,7 @@ const BackupPage = lazy(() => import('./pages/BackupPage'));
 export default function App() {
   const loaded = useReminderStore((state) => state.loaded);
   const hydrate = useReminderStore((state) => state.hydrate);
+  const location = useLocation();
 
   useEffect(() => {
     if (!loaded) void hydrate();
@@ -29,7 +30,7 @@ export default function App() {
 
   return (
     <>
-      <ErrorBoundary>
+      <ErrorBoundary key={location.pathname}>
         <Suspense fallback={<div style={{ padding: 24, textAlign: 'center' }}>正在载入…</div>}>
           <ThemeController />
           <AppLockGate>
