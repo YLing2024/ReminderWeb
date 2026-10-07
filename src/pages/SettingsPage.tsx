@@ -15,9 +15,10 @@ import {
   TagIcon,
 } from '../components/icons';
 import { ConfirmDialog, IconButton, Toggle } from '../components/ui';
+import { PasswordField } from '../components/PasswordField';
 import { WebDavSettings } from '../components/WebDavSettings';
 import { SEED_PALETTES } from '../lib/theme';
-import { hashPassword, isValidPassword, verifyStoredPassword } from '../lib/app-lock';
+import { changeLockPassword, clearLockPassword, setupLockPassword } from '../lib/app-lock';
 import { buildIcs } from '../lib/ics';
 import { ensureLunar } from '../lib/lunar';
 import { todayLocalDate } from '../lib/local-date';
@@ -62,8 +63,9 @@ export default function SettingsPage() {
 
   const [showScrollDialog, setShowScrollDialog] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
-  const [showPinDialog, setShowPinDialog] = useState(false);
-  const [showDisablePin, setShowDisablePin] = useState(false);
+  const [showSetupLock, setShowSetupLock] = useState(false);
+  const [showChangeLock, setShowChangeLock] = useState(false);
+  const [verifyIntent, setVerifyIntent] = useState<'disable' | 'clear' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const customSeedHex = useMemo(
@@ -367,15 +369,31 @@ export default function SettingsPage() {
           <div className={styles.card}>
             <SwitchRow
               title="应用锁"
-              description="开启后离开页面再回来需输入 PIN 解锁"
+              description="开启后离开页面再回来需输入应用锁密码"
               checked={settings.appLockEnabled}
               onChange={(value) => {
-                if (value) setShowPinDialog(true);
-                else setShowDisablePin(true);
+                if (value) {
+                  if (settings.appLockPasswordHash === null) setShowSetupLock(true);
+                  else void updateSettings({ appLockEnabled: true });
+                } else {
+                  setVerifyIntent('disable');
+                }
               }}
             />
-            {settings.appLockEnabled && (
-              <ActionRow title="修改 PIN 码" description="重新设置 4–6 位数字密码" onClick={() => setShowPinDialog(true)} />
+            {settings.appLockEnabled && settings.appLockPasswordHash !== null && (
+              <>
+                <ActionRow
+                  title="修改密码"
+                  description="重新设置应用锁密码（需先验证当前密码）"
+                  onClick={() => setShowChangeLock(true)}
+                />
+                <ActionRow
+                  title="清除应用锁"
+                  description="删除本机保存的应用锁密码，需验证当前密码"
+                  danger
+                  onClick={() => setVerifyIntent('clear')}
+                />
+              </>
             )}
           </div>
         </Group>
@@ -397,26 +415,59 @@ export default function SettingsPage() {
         />
       )}
 
-      {showPinDialog && (
-        <PinSetupDialog
-          onClose={() => setShowPinDialog(false)}
-          onSave={async (pin) => {
-            await updateSettings({ appLockPasswordHash: await hashPassword(pin), appLockEnabled: true });
-            setShowPinDialog(false);
+      {showSetupLock && (
+        <PasswordSetupDialog
+          onClose={() => setShowSetupLock(false)}
+          onSave={async (password, confirm) => {
+            const result = await setupLockPassword(password, confirm);
+            if (!result.ok) return result.error;
+            await updateSettings({ appLockPasswordHash: result.credential, appLockEnabled: true });
+            setShowSetupLock(false);
+            setNotice('应用锁已开启');
+            return null;
           }}
         />
       )}
 
-      {showDisablePin && settings.appLockPasswordHash !== null && (
-        <PinVerifyDialog
-          onClose={() => setShowDisablePin(false)}
-          onVerify={async (pin) => {
-            const ok = await verifyStoredPassword(pin, settings.appLockPasswordHash!);
-            if (ok.ok) {
-              await updateSettings({ appLockEnabled: false });
-              setShowDisablePin(false);
+      {showChangeLock && settings.appLockPasswordHash !== null && (
+        <PasswordChangeDialog
+          onClose={() => setShowChangeLock(false)}
+          onChange={async (current, next, confirm) => {
+            const stored = settings.appLockPasswordHash!;
+            const result = await changeLockPassword(current, next, confirm, stored);
+            if (!result.ok) return result.error;
+            await updateSettings({ appLockPasswordHash: result.credential });
+            setShowChangeLock(false);
+            setNotice('应用锁密码已更新');
+            return null;
+          }}
+        />
+      )}
+
+      {verifyIntent !== null && settings.appLockPasswordHash !== null && (
+        <PasswordVerifyDialog
+          title={verifyIntent === 'clear' ? '清除应用锁' : '关闭应用锁'}
+          description={
+            verifyIntent === 'clear'
+              ? '清除后需重新设置密码才能再次开启应用锁。'
+              : '关闭应用锁前需验证当前密码。'
+          }
+          onClose={() => setVerifyIntent(null)}
+          onVerify={async (password) => {
+            const intent = verifyIntent;
+            const stored = settings.appLockPasswordHash!;
+            const ok = await clearLockPassword(password, stored);
+            if (ok) {
+              if (intent === 'clear') {
+                await updateSettings({ appLockPasswordHash: null, appLockEnabled: false });
+                setNotice('已清除应用锁');
+              } else {
+                await updateSettings({ appLockEnabled: false });
+                setNotice('已关闭应用锁');
+              }
+              setVerifyIntent(null);
             }
-            return ok.ok;
+            return ok;
           }}
         />
       )}
@@ -573,125 +624,243 @@ function ChoiceDialog({
   );
 }
 
-function PinSetupDialog({
+const WEAK_PASSWORD_HINT = '建议至少 6 位，混合字母与符号';
+
+function PasswordSetupDialog({
   onClose,
   onSave,
 }: {
   onClose: () => void;
-  onSave: (pin: string) => Promise<void>;
+  onSave: (password: string, confirm: string) => Promise<string | null>;
 }) {
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const valid = isValidPassword(pin) && pin === confirm;
+  const [saving, setSaving] = useState(false);
+  const canSubmit = password.length > 0 && confirm.length > 0 && !saving;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSaving(true);
+    const message = await onSave(password, confirm);
+    setSaving(false);
+    if (message !== null) setError(message);
+  };
 
   return (
     <div className={styles.dialogBackdrop} role="presentation" onClick={onClose}>
-      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label="设置 PIN 码" onClick={(e) => e.stopPropagation()}>
-        <h2 className={styles.dialogTitle}>设置 PIN 码</h2>
-        <label className={styles.inputField}>
-          <span className={styles.rowDesc}>4–6 位数字</span>
-          <input
-            className={styles.pinInput}
-            type="password"
-            inputMode="numeric"
-            autoFocus
-            maxLength={6}
-            value={pin}
-            onChange={(event) => {
-              setError(null);
-              setPin(event.target.value.replace(/\D/g, '').slice(0, 6));
-            }}
-          />
-        </label>
-        <label className={styles.inputField}>
-          <span className={styles.rowDesc}>再次输入</span>
-          <input
-            className={styles.pinInput}
-            type="password"
-            inputMode="numeric"
-            maxLength={6}
-            value={confirm}
-            onChange={(event) => {
-              setError(null);
-              setConfirm(event.target.value.replace(/\D/g, '').slice(0, 6));
-            }}
-          />
-        </label>
+      <form
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label="设置应用锁密码"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <h2 className={styles.dialogTitle}>设置应用锁密码</h2>
+        <PasswordField
+          label="密码"
+          value={password}
+          visible={passwordVisible}
+          onChange={(value) => {
+            setError(null);
+            setPassword(value);
+          }}
+          onToggleVisible={() => setPasswordVisible((current) => !current)}
+          autoComplete="new-password"
+          autoFocus
+          placeholder="任意字符，1–128 位"
+          ariaLabel="新密码"
+        />
+        <p className={styles.passwordHint}>{WEAK_PASSWORD_HINT}</p>
+        <PasswordField
+          label="再次输入"
+          value={confirm}
+          visible={confirmVisible}
+          onChange={(value) => {
+            setError(null);
+            setConfirm(value);
+          }}
+          onToggleVisible={() => setConfirmVisible((current) => !current)}
+          autoComplete="new-password"
+          ariaLabel="确认新密码"
+        />
         {error !== null && <p className={styles.dialogError}>{error}</p>}
         <div className={styles.dialogActions}>
           <button type="button" className={styles.textButton} onClick={onClose}>
             取消
           </button>
-          <button
-            type="button"
-            className={`${styles.textButton} ${styles.textButtonPrimary}`}
-            disabled={!valid}
-            onClick={() => {
-              if (!isValidPassword(pin)) {
-                setError('PIN 需为 4–6 位数字');
-                return;
-              }
-              if (pin !== confirm) {
-                setError('两次输入不一致');
-                return;
-              }
-              void onSave(pin);
-            }}
-          >
+          <button type="submit" className={`${styles.textButton} ${styles.textButtonPrimary}`} disabled={!canSubmit}>
             保存
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
 
-function PinVerifyDialog({
+function PasswordChangeDialog({
+  onClose,
+  onChange,
+}: {
+  onClose: () => void;
+  onChange: (current: string, next: string, confirm: string) => Promise<string | null>;
+}) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [currentVisible, setCurrentVisible] = useState(false);
+  const [nextVisible, setNextVisible] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const canSubmit = current.length > 0 && next.length > 0 && confirm.length > 0 && !saving;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSaving(true);
+    const message = await onChange(current, next, confirm);
+    setSaving(false);
+    if (message !== null) setError(message);
+  };
+
+  return (
+    <div className={styles.dialogBackdrop} role="presentation" onClick={onClose}>
+      <form
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label="修改应用锁密码"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <h2 className={styles.dialogTitle}>修改应用锁密码</h2>
+        <PasswordField
+          label="当前密码"
+          value={current}
+          visible={currentVisible}
+          onChange={(value) => {
+            setError(null);
+            setCurrent(value);
+          }}
+          onToggleVisible={() => setCurrentVisible((value) => !value)}
+          autoComplete="current-password"
+          autoFocus
+          ariaLabel="当前密码"
+        />
+        <PasswordField
+          label="新密码"
+          value={next}
+          visible={nextVisible}
+          onChange={(value) => {
+            setError(null);
+            setNext(value);
+          }}
+          onToggleVisible={() => setNextVisible((value) => !value)}
+          autoComplete="new-password"
+          placeholder="任意字符，1–128 位"
+          ariaLabel="新密码"
+        />
+        <p className={styles.passwordHint}>{WEAK_PASSWORD_HINT}</p>
+        <PasswordField
+          label="再次输入新密码"
+          value={confirm}
+          visible={confirmVisible}
+          onChange={(value) => {
+            setError(null);
+            setConfirm(value);
+          }}
+          onToggleVisible={() => setConfirmVisible((value) => !value)}
+          autoComplete="new-password"
+          ariaLabel="确认新密码"
+        />
+        {error !== null && <p className={styles.dialogError}>{error}</p>}
+        <div className={styles.dialogActions}>
+          <button type="button" className={styles.textButton} onClick={onClose}>
+            取消
+          </button>
+          <button type="submit" className={`${styles.textButton} ${styles.textButtonPrimary}`} disabled={!canSubmit}>
+            保存
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function PasswordVerifyDialog({
+  title,
+  description,
   onClose,
   onVerify,
 }: {
+  title: string;
+  description: string;
   onClose: () => void;
-  onVerify: (pin: string) => Promise<boolean>;
+  onVerify: (password: string) => Promise<boolean>;
 }) {
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
+  const [visible, setVisible] = useState(false);
   const [error, setError] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  const submit = async () => {
+    if (password.length === 0 || checking) return;
+    setChecking(true);
+    const ok = await onVerify(password);
+    setChecking(false);
+    if (!ok) setError(true);
+  };
+
   return (
     <div className={styles.dialogBackdrop} role="presentation" onClick={onClose}>
-      <div className={styles.dialog} role="dialog" aria-modal="true" aria-label="验证 PIN 码" onClick={(e) => e.stopPropagation()}>
-        <h2 className={styles.dialogTitle}>验证 PIN 码</h2>
-        <p className={styles.rowDesc}>关闭应用锁前需验证当前 PIN。</p>
-        <input
-          className={styles.pinInput}
-          type="password"
-          inputMode="numeric"
-          autoFocus
-          maxLength={6}
-          value={pin}
-          onChange={(event) => {
+      <form
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <h2 className={styles.dialogTitle}>{title}</h2>
+        <p className={styles.rowDesc}>{description}</p>
+        <PasswordField
+          value={password}
+          visible={visible}
+          onChange={(value) => {
             setError(false);
-            setPin(event.target.value.replace(/\D/g, '').slice(0, 6));
+            setPassword(value);
           }}
+          onToggleVisible={() => setVisible((current) => !current)}
+          autoComplete="current-password"
+          autoFocus
+          ariaLabel="当前密码"
         />
-        {error && <p className={styles.dialogError}>PIN 码不正确</p>}
+        {error && <p className={styles.dialogError}>密码不正确</p>}
         <div className={styles.dialogActions}>
           <button type="button" className={styles.textButton} onClick={onClose}>
             取消
           </button>
           <button
-            type="button"
+            type="submit"
             className={`${styles.textButton} ${styles.textButtonPrimary}`}
-            disabled={pin.length < 4}
-            onClick={() => {
-              void onVerify(pin).then((ok) => {
-                if (!ok) setError(true);
-              });
-            }}
+            disabled={password.length === 0 || checking}
           >
             确认
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

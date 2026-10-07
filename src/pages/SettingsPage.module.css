@@ -374,23 +374,16 @@
   cursor: not-allowed;
 }
 
-.inputField {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
+.passwordHint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
-.pinInput {
-  width: 100%;
-  min-height: 52px;
-  padding: 0 14px;
-  border-radius: var(--radius-input);
-  border: 1px solid var(--md-sys-color-outline);
-  background: transparent;
-  color: var(--md-sys-color-on-surface);
-  font-size: 18px;
-  letter-spacing: 0.3em;
+/* 密码字段之间的间距（PasswordField 根节点为 label）。 */
+.dialog label {
+  display: block;
+  margin-bottom: 12px;
 }
 
 .dialogError {
