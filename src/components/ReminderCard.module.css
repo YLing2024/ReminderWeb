@@ -51,6 +51,17 @@
   min-height: 96px;
 }
 
+/* 个性化背景图（M10 §3）：铺满主体区，文字加浅阴影保证可读。 */
+.body.withImage {
+  background-size: cover;
+  background-position: center;
+}
+
+.body.withImage .number,
+.body.withImage .unit {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
 .number {
   font-family: var(--font-numeric);
   font-size: clamp(40px, 16vw, 64px);

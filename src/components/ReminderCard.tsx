@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import type { ReminderItem, ReminderType } from '../types/reminder';
 import { reminderDisplayInfo, splitReferenceText } from '../lib/display';
 import { readableTextOn } from '../lib/contrast';
+import { useCardBackgroundImage } from '../lib/use-card-image';
 import type { LocalDate } from '../lib/local-date';
 import styles from './ReminderCard.module.css';
 
@@ -36,6 +37,7 @@ export function ReminderCard({
 }) {
   const info = reminderDisplayInfo(item, today, item.isLunar, true);
   const reference = splitReferenceText(info.referenceText, item.isLunar);
+  const backgroundUrl = useCardBackgroundImage(item);
   // 浅色标签色时白字对比度不足，自动改用深色文字，保证 ≥4.5:1。
   const bandColor = resolveBandColor(item, tagColor);
   const bandTextColor = readableTextOn(bandColor);
@@ -98,7 +100,10 @@ export function ReminderCard({
           {info.headerTitle}
         </span>
       </div>
-      <div className={styles.body}>
+      <div
+        className={`${styles.body} ${backgroundUrl !== null ? styles.withImage : ''}`}
+        style={backgroundUrl === null ? undefined : { backgroundImage: `url("${backgroundUrl}")` }}
+      >
         <span className={styles.number}>{info.isToday ? '今' : info.dayCount}</span>
         <span className={styles.unit}>天</span>
       </div>

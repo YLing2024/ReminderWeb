@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowBackIcon, SaveIcon, ChevronRightIcon, PlusIcon, CloseIcon } from '../components/icons';
 import { IconButton, Toggle } from '../components/ui';
 import { createReminderItem, type NotificationTime, type ReminderItem, type ReminderType, type RepeatUnit } from '../types/reminder';
+import { imageBasename, processCardImage } from '../lib/card-image';
+import { deleteImageBlob, saveImageBlob } from '../lib/storage';
 import {
   lunarDayLabel,
   lunarMonthsOfYear,
@@ -65,6 +67,7 @@ export default function EditPage() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
 
   useEffect(() => {
     if (existing !== undefined) setDraft(existing);
@@ -73,6 +76,41 @@ export default function EditPage() {
   const isInterval = draft.type === 'ANNUAL';
 
   const patch = (partial: Partial<ReminderItem>) => setDraft((current) => ({ ...current, ...partial }));
+
+  const pickBackgroundImage = async (file: File | undefined) => {
+    if (file === undefined) return;
+    setImageBusy(true);
+    setError(null);
+    try {
+      const processed = await processCardImage(file);
+      const previous = imageBasename(draft.cardBackgroundImagePath);
+      await saveImageBlob(processed.name, processed.blob);
+      if (previous !== '' && previous !== processed.name) {
+        try {
+          await deleteImageBlob(previous);
+        } catch {
+          // 旧图清理失败不影响新图使用。
+        }
+      }
+      patch({ cardBackgroundType: 'IMAGE', cardBackgroundImagePath: processed.path });
+    } catch {
+      setError('背景图处理失败，请换一张图片重试');
+    } finally {
+      setImageBusy(false);
+    }
+  };
+
+  const removeBackgroundImage = async () => {
+    const previous = imageBasename(draft.cardBackgroundImagePath);
+    if (previous !== '') {
+      try {
+        await deleteImageBlob(previous);
+      } catch {
+        // 图片可能已被其它流程清理，忽略。
+      }
+    }
+    patch({ cardBackgroundType: 'DEFAULT', cardBackgroundImagePath: '' });
+  };
 
   const setLunarDate = (year: number, month: number, day: number) => {
     const dayCount = lunarMonthsOfYear(year).find((entry) => entry.month === month)?.dayCount ?? 30;
@@ -196,6 +234,40 @@ export default function EditPage() {
           </div>
           <Toggle checked={draft.isCustomized} onChange={(next) => patch({ isCustomized: next })} label="个性化" />
         </div>
+
+        {draft.isCustomized && (
+          <div className={styles.field}>
+            <span className={styles.fieldLabel}>卡片背景图</span>
+            <input
+              className={styles.input}
+              type="file"
+              accept="image/*"
+              disabled={imageBusy}
+              aria-label="选择背景图"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                void pickBackgroundImage(file);
+              }}
+            />
+            {draft.cardBackgroundType === 'IMAGE' && draft.cardBackgroundImagePath !== '' ? (
+              <div className={styles.inlineRow}>
+                <span className={styles.hint}>当前背景图：{imageBasename(draft.cardBackgroundImagePath)}</span>
+                <button
+                  type="button"
+                  className={styles.todayButton}
+                  disabled={imageBusy}
+                  onClick={() => void removeBackgroundImage()}
+                >
+                  移除背景图
+                </button>
+              </div>
+            ) : (
+              <span className={styles.hint}>可选，自动压到最长边 1080、JPEG 0.85；卡片与分享图都会显示</span>
+            )}
+            {imageBusy && <span className={styles.hint}>正在处理图片…</span>}
+          </div>
+        )}
 
         <label className={styles.field}>
           <span className={styles.fieldLabel}>标签（可选）</span>
