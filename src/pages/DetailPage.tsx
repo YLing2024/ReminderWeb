@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowBackIcon, DeleteIcon, EditIcon, PinIcon, ShareIcon } from '../components/icons';
 import { ConfirmDialog, IconButton } from '../components/ui';
+import { ShareImageDialog } from '../components/ShareImageDialog';
 import { reminderDisplayInfo } from '../lib/display';
 import { readableTextOn } from '../lib/contrast';
 import { calculateBirthdayInfo } from '../lib/birthday';
@@ -30,6 +31,7 @@ export default function DetailPage() {
   );
   const [flipped, setFlipped] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   if (item === undefined) {
     return (
@@ -63,7 +65,7 @@ export default function DetailPage() {
           <IconButton label={item.isPinned ? '取消置顶' : '置顶'} pressed={item.isPinned} onClick={() => void togglePin(item.id)}>
             <PinIcon />
           </IconButton>
-          <IconButton label="分享成图片（M3 交付）" disabled onClick={() => undefined}>
+          <IconButton label="分享成图片" onClick={() => setShowShare(true)}>
             <ShareIcon />
           </IconButton>
           <IconButton label="删除" onClick={() => setConfirmDelete(true)}>
@@ -150,6 +152,10 @@ export default function DetailPage() {
           void deleteReminder(item.id).then(() => navigate('/', { replace: true }));
         }}
       />
+
+      {showShare && (
+        <ShareImageDialog item={item} today={today} tagColor={tagColor} onClose={() => setShowShare(false)} />
+      )}
     </div>
   );
 }
