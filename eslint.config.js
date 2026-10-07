@@ -27,4 +27,14 @@ export default tseslint.config(
       'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
+  {
+    // 后端为 Node 服务，允许 console 输出（日志级别由 LOG_LEVEL 控制）。
+    files: ['server/**/*.ts'],
+    languageOptions: {
+      globals: globals.node,
+    },
+    rules: {
+      'no-console': 'off',
+    },
+  },
 );

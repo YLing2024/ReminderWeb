@@ -6,11 +6,15 @@
   "license": "GPL-3.0",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node --watch server/src/index.ts",
+    "start": "node server/src/index.ts",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:server": "node --test server/test/*.test.ts",
+    "typecheck:server": "tsc --noEmit -p server/tsconfig.json"
   },
   "dependencies": {
     "@material/material-color-utilities": "^0.3.0",

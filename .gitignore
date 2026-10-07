@@ -5,3 +5,10 @@ coverage
 *.local
 .DS_Store
 *.tsbuildinfo
+
+# 后端运行时数据与本地环境
+server/data/
+*.db
+*.db-wal
+*.db-shm
+.env
