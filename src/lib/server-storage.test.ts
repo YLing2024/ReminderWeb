@@ -6,6 +6,7 @@ import {
   syncedSettings,
 } from './server-storage';
 import { DEFAULT_SETTINGS } from './storage';
+import { makeItem } from '../test/factories';
 
 describe('syncedSettings / mergeServerSettings', () => {
   it('可同步字段上传，仅本机字段被剔除', () => {
@@ -83,5 +84,41 @@ describe('normalizeSnapshot', () => {
   it('缺失 updatedAt 的条目补 0', () => {
     const snapshot = normalizeSnapshot({ reminders: [{ id: 1, title: 't', date: '2026-01-01' }] });
     expect(snapshot.reminders[0]?.updatedAt).toBe(0);
+  });
+});
+
+describe('两驱动一致性', () => {
+  it('本地 ReminderItem 经服务器快照往返后字段不变', () => {
+    const items = [
+      makeItem({ id: 1, title: '甲', date: '2026-01-01' }),
+      makeItem({ id: 2, title: '乙', date: '2026-02-02', type: 'COUNT_UP' }),
+    ];
+    const snapshot = normalizeSnapshot({
+      revision: 7,
+      reminders: items.map((item) => ({ ...item, updatedAt: 1000 })),
+      tags: [],
+      settings: { value: {}, updatedAt: 0 },
+      tombstones: [],
+    });
+    // 去掉同步元数据后，与本地条目逐字段一致（未知/玻璃字段都不丢）。
+    const roundTripped = snapshot.reminders.map((item) => {
+      const copy: Record<string, unknown> = { ...item };
+      delete copy.updatedAt;
+      return copy;
+    });
+    expect(roundTripped).toEqual(items);
+  });
+
+  it('本地模式的设置经 syncedSettings 上传后再合并，仅本机字段不变', () => {
+    const local = {
+      ...DEFAULT_SETTINGS,
+      themeOption: 'DARK' as const,
+      webdavPassword: 'local-secret',
+      appLockEnabled: true,
+    };
+    const merged = mergeServerSettings(local, syncedSettings(local));
+    expect(merged.themeOption).toBe('DARK');
+    expect(merged.webdavPassword).toBe('local-secret');
+    expect(merged.appLockEnabled).toBe(true);
   });
 });

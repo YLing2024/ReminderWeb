@@ -11,6 +11,8 @@ export function ServerStatusBar() {
   const mode = useReminderStore((state) => state.mode);
   const canUploadLocal = useReminderStore((state) => state.canUploadLocal);
   const syncError = useReminderStore((state) => state.syncError);
+  const serverNotice = useReminderStore((state) => state.serverNotice);
+  const dismissServerNotice = useReminderStore((state) => state.dismissServerNotice);
   const syncing = useReminderStore((state) => state.syncing);
   const uploadLocalData = useReminderStore((state) => state.uploadLocalData);
   const syncNow = useReminderStore((state) => state.syncNow);
@@ -42,6 +44,17 @@ export function ServerStatusBar() {
         <span className={styles.text}>同步失败：{syncError}</span>
         <button type="button" className={styles.action} disabled={syncing} onClick={() => void syncNow()}>
           {syncing ? '正在重试…' : '重试'}
+        </button>
+      </div>
+    );
+  }
+
+  if (serverNotice !== null) {
+    return (
+      <div className={styles.bar} data-kind="action" role="status">
+        <span className={styles.text}>{serverNotice}</span>
+        <button type="button" className={styles.action} onClick={dismissServerNotice}>
+          知道了
         </button>
       </div>
     );

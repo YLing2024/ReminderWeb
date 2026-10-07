@@ -35,6 +35,7 @@ import {
   type SyncTombstone,
 } from '../lib/api';
 import {
+  LOCAL_ONLY_SETTING_KEYS,
   loadServerCache,
   mergeServerSettings,
   normalizeSnapshot,
@@ -73,6 +74,9 @@ interface ReminderStore {
   authRequired: boolean;
   /** 首次连接：服务器为空而本机有旧数据，可一键上传。 */
   canUploadLocal: boolean;
+  /** 一次性提示（如「已按服务器数据更新」）。 */
+  serverNotice: string | null;
+  dismissServerNotice: () => void;
 
   /** 内部：提醒与标签的墓碑，用于把删除同步给服务器。 */
   tombstones: SyncTombstone[];
@@ -215,7 +219,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
 
   function isSyncedSettingsChange(partial: Partial<AppSettings>): boolean {
     for (const key of Object.keys(partial)) {
-      if (!LOCAL_ONLY_SETTINGS.has(key as keyof AppSettings)) return true;
+      if (!LOCAL_ONLY_SETTING_KEYS.has(key as keyof AppSettings)) return true;
     }
     return false;
   }
@@ -236,6 +240,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
     syncError: null,
     authRequired: false,
     canUploadLocal: false,
+    serverNotice: null,
+    dismissServerNotice: () => set({ serverNotice: null }),
 
     tombstones: [],
     settingsUpdatedAt: 0,
@@ -270,7 +276,11 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
             tombstones: snapshot.tombstones,
           });
         } else {
-          adoptSnapshot(snapshot, { canUploadLocal: false });
+          const staleCache = cache !== null && cache.revision !== snapshot.revision;
+          adoptSnapshot(snapshot, {
+            canUploadLocal: false,
+            ...(staleCache ? { serverNotice: '已按服务器数据更新' } : {}),
+          });
         }
         void refreshVersion();
       } catch (error) {
@@ -526,12 +536,14 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
           ...get().reminders.map((item) => ({ id: item.id, updatedAt: at, kind: 'reminder' as const })),
           ...get().tags.map((item) => ({ id: item.id, updatedAt: at, kind: 'tag' as const })),
         ];
+        await clearAllData();
         set({
           reminders: [],
           tags: [],
           settings: { ...DEFAULT_SETTINGS },
           tombstones,
           settingsUpdatedAt: at,
+          canUploadLocal: false,
         });
         await persist({ synced: true });
         return;
@@ -552,19 +564,3 @@ async function refreshVersion(): Promise<void> {
     // 忽略：版本信息仅用于展示。
   }
 }
-
-const LOCAL_ONLY_SETTINGS = new Set<keyof AppSettings>([
-  'notificationEnabled',
-  'backupEncryptionEnabled',
-  'lastBackupAt',
-  'appLockEnabled',
-  'appLockPasswordHash',
-  'webdavEnabled',
-  'webdavServer',
-  'webdavUsername',
-  'webdavPassword',
-  'webdavAutoBackup',
-  'webdavKeepCount',
-  'webdavLastSuccessAt',
-  'webdavLastResult',
-]);
