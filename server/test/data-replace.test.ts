@@ -187,6 +187,29 @@ test('图片上传接口：非法名 400、空内容 400、同名覆盖、删除
   }
 });
 
+test('PUT /api/data/replace：坏请求体 400（不静默清库）', async () => {
+  const ts = await startTestServer({ env: { AUTH_MODE: 'none' } });
+  try {
+    await fetch(`${ts.url}/api/data/replace`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reminders: [reminder(1, '基线')], tags: [], settings: { value: {}, updatedAt: 1 }, images: [] }),
+    });
+    for (const body of ['{}', '[]', '{"tags":[]}']) {
+      const res = await fetch(`${ts.url}/api/data/replace`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body,
+      });
+      assert.equal(res.status, 400, body);
+    }
+    const after = (await (await fetch(`${ts.url}/api/data`)).json()) as Record<string, unknown>;
+    assert.equal((after.reminders as unknown[]).length, 1, '坏请求不得清空数据');
+  } finally {
+    await ts.close();
+  }
+});
+
 test('upsertImage / readImages：字节往返一致', () => {
   const db = openDatabaseAt(':memory:');
   upsertImage(db, 'x.jpg', new Uint8Array([7, 8, 9]), 1);

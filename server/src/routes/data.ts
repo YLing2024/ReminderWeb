@@ -108,6 +108,13 @@ export function handlePutData(ctx: RouteContext): RouteResponse {
  */
 export function handlePutReplace(ctx: RouteContext): RouteResponse {
   const serverRevisionBefore = readRevision(ctx.db);
+  // 保护：请求体必须是对象且带 reminders 数组，避免空 / 坏体静默清库。
+  if (typeof ctx.body !== 'object' || ctx.body === null || Array.isArray(ctx.body)) {
+    return { status: 400, body: { error: 'invalid_request', message: '替换请求体不是对象' } };
+  }
+  if (!Array.isArray((ctx.body as Record<string, unknown>).reminders)) {
+    return { status: 400, body: { error: 'invalid_request', message: '替换请求体缺少 reminders 列表' } };
+  }
   const parsed = parseReplaceData(ctx.body);
   let revision: number;
   try {
