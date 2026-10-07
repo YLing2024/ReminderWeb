@@ -164,6 +164,11 @@ describe('坏包 / 缺 metadata.json 友好报错', () => {
     await expect(decodeArchive(random)).rejects.toThrow(/无法识别|解密/);
   });
 
+  it('空文件抛 BackupError，不白屏', async () => {
+    await expect(decodeArchive(new Uint8Array(0))).rejects.toBeInstanceOf(BackupError);
+    await expect(decodeArchive(new Uint8Array(0))).rejects.toThrow(/无法识别|解密/);
+  });
+
   it('metadata.json 非法 JSON 时报错', () => {
     expect(() => parseBackupData('{ not json')).toThrow(BackupError);
   });

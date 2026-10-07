@@ -93,6 +93,23 @@ export async function exportBackup(
   };
 }
 
+/** 把归档 metadata 里的可空设置映射为本地设置（纯函数，缺省字段不覆盖）。 */
+export function settingsFromBackup(metadata: BackupData): Partial<AppSettings> {
+  const settings: Partial<AppSettings> = {};
+  if (metadata.themeOption !== null && metadata.themeOption !== undefined) settings.themeOption = metadata.themeOption;
+  if (metadata.pureBlackEnabled !== null && metadata.pureBlackEnabled !== undefined) settings.pureBlackEnabled = metadata.pureBlackEnabled;
+  if (metadata.cardColoringEnabled !== null && metadata.cardColoringEnabled !== undefined) settings.cardColoringEnabled = metadata.cardColoringEnabled;
+  if (metadata.defaultPage !== null && metadata.defaultPage !== undefined) settings.defaultPage = metadata.defaultPage;
+  if (metadata.viewMode !== null && metadata.viewMode !== undefined) settings.viewMode = metadata.viewMode;
+  if (metadata.backupReminderEnabled !== null && metadata.backupReminderEnabled !== undefined) settings.backupReminderEnabled = metadata.backupReminderEnabled;
+  if (metadata.dynamicColorEnabled !== null && metadata.dynamicColorEnabled !== undefined) settings.dynamicColorEnabled = metadata.dynamicColorEnabled;
+  if (metadata.themeColorPalette !== null && metadata.themeColorPalette !== undefined) settings.themeColorPalette = metadata.themeColorPalette;
+  if (metadata.customColorSeed !== null && metadata.customColorSeed !== undefined) settings.customColorSeed = metadata.customColorSeed;
+  if (metadata.scrollBehavior !== null && metadata.scrollBehavior !== undefined) settings.scrollBehavior = metadata.scrollBehavior;
+  if (metadata.homeCategoryEnabled !== null && metadata.homeCategoryEnabled !== undefined) settings.homeCategoryEnabled = metadata.homeCategoryEnabled;
+  return settings;
+}
+
 /** 导入：解析 + 校验 + 落库图片，返回可供 store 写入的数据。 */
 export async function importBackup(bytes: Uint8Array): Promise<ImportResult> {
   const content = await decodeArchive(bytes);
@@ -111,23 +128,10 @@ export async function importBackup(bytes: Uint8Array): Promise<ImportResult> {
   }
   await replaceFontBlobs(fontBlobs);
 
-  const settings: Partial<AppSettings> = {};
-  if (metadata.themeOption !== null && metadata.themeOption !== undefined) settings.themeOption = metadata.themeOption;
-  if (metadata.pureBlackEnabled !== null && metadata.pureBlackEnabled !== undefined) settings.pureBlackEnabled = metadata.pureBlackEnabled;
-  if (metadata.cardColoringEnabled !== null && metadata.cardColoringEnabled !== undefined) settings.cardColoringEnabled = metadata.cardColoringEnabled;
-  if (metadata.defaultPage !== null && metadata.defaultPage !== undefined) settings.defaultPage = metadata.defaultPage;
-  if (metadata.viewMode !== null && metadata.viewMode !== undefined) settings.viewMode = metadata.viewMode;
-  if (metadata.backupReminderEnabled !== null && metadata.backupReminderEnabled !== undefined) settings.backupReminderEnabled = metadata.backupReminderEnabled;
-  if (metadata.dynamicColorEnabled !== null && metadata.dynamicColorEnabled !== undefined) settings.dynamicColorEnabled = metadata.dynamicColorEnabled;
-  if (metadata.themeColorPalette !== null && metadata.themeColorPalette !== undefined) settings.themeColorPalette = metadata.themeColorPalette;
-  if (metadata.customColorSeed !== null && metadata.customColorSeed !== undefined) settings.customColorSeed = metadata.customColorSeed;
-  if (metadata.scrollBehavior !== null && metadata.scrollBehavior !== undefined) settings.scrollBehavior = metadata.scrollBehavior;
-  if (metadata.homeCategoryEnabled !== null && metadata.homeCategoryEnabled !== undefined) settings.homeCategoryEnabled = metadata.homeCategoryEnabled;
-
   return {
     reminders: Array.isArray(metadata.reminders) ? metadata.reminders : [],
     tags: Array.isArray(metadata.tags) ? metadata.tags : [],
-    settings,
+    settings: settingsFromBackup(metadata),
     imageCount: Object.keys(blobs).length,
   };
 }
