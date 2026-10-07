@@ -4,7 +4,11 @@
  */
 import type { ReminderItem } from '../types/reminder';
 import { calculateNextTargetDate, formatLunarDate, formatLunarDateShort, resolveIntervalStage } from './calendar';
-import { daysBetween, formatGregorianDate, parseLocalDate, weekdayChinese, type LocalDate } from './local-date';
+import { daysBetween, formatGregorianDate, ld, tryParseLocalDate, weekdayChinese, type LocalDate } from './local-date';
+
+function itemStart(item: ReminderItem): LocalDate {
+  return tryParseLocalDate(item.date) ?? ld(1970, 1, 1);
+}
 
 export interface ReminderDisplayInfo {
   /** 顶部色带文字：`title + 空格 + suffix`（如「事件 生日就是」）。 */
@@ -55,7 +59,9 @@ export function reminderDisplayInfo(
     case 'ANNUAL': {
       const stage = resolveIntervalStage(item, today);
       if (stage !== null) {
-        const periodOffset = daysBetween(parseLocalDate(item.date), parseLocalDate(item.endDate ?? item.date));
+        const start = itemStart(item);
+        const intervalEnd = tryParseLocalDate(item.endDate) ?? start;
+        const periodOffset = daysBetween(start, intervalEnd);
         const referenceText = formatReferenceDate(stage.date, useLunar, shortFormat);
         const intervalSubText =
           stage.label === '第'
@@ -78,9 +84,9 @@ export function reminderDisplayInfo(
         return {
           headerTitle: buildHeaderTitle(item.title, '已过'),
           suffix: '已过',
-          dayCount: Math.max(0, daysBetween(parseLocalDate(item.date), today)),
+          dayCount: Math.max(0, daysBetween(itemStart(item), today)),
           isToday: false,
-          referenceText: formatReferenceDate(parseLocalDate(item.date), useLunar, shortFormat),
+          referenceText: formatReferenceDate(itemStart(item), useLunar, shortFormat),
           intervalSubText: null,
         };
       }
@@ -100,13 +106,13 @@ export function reminderDisplayInfo(
     case 'COUNT_UP': {
       const includeStartDay = item.notificationConfig.includeStartDay;
       const daysElapsed =
-        Math.max(0, daysBetween(parseLocalDate(item.date), today)) + (includeStartDay ? 1 : 0);
+        Math.max(0, daysBetween(itemStart(item), today)) + (includeStartDay ? 1 : 0);
       return {
         headerTitle: buildHeaderTitle(item.title, '第'),
         suffix: '第',
         dayCount: daysElapsed,
         isToday: false,
-        referenceText: formatReferenceDate(parseLocalDate(item.date), useLunar, shortFormat),
+        referenceText: formatReferenceDate(itemStart(item), useLunar, shortFormat),
         intervalSubText: null,
       };
     }
@@ -117,9 +123,9 @@ export function reminderDisplayInfo(
         return {
           headerTitle: buildHeaderTitle(item.title, '生日已过'),
           suffix: '生日已过',
-          dayCount: Math.max(0, daysBetween(parseLocalDate(item.date), today)),
+          dayCount: Math.max(0, daysBetween(itemStart(item), today)),
           isToday: false,
-          referenceText: formatReferenceDate(parseLocalDate(item.date), useLunar, shortFormat),
+          referenceText: formatReferenceDate(itemStart(item), useLunar, shortFormat),
           intervalSubText: null,
         };
       }

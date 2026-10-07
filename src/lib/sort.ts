@@ -4,7 +4,7 @@
  */
 import type { ReminderItem, TagItem } from '../types/reminder';
 import { calculateNextKeyDate, calculateNextTargetDate } from './calendar';
-import { daysBetween, parseLocalDate, type LocalDate } from './local-date';
+import { daysBetween, ld, tryParseLocalDate, type LocalDate } from './local-date';
 
 export interface ReminderSectionData {
   key: string;
@@ -23,7 +23,7 @@ export function reminderSortValue(item: ReminderItem, today: LocalDate): number 
       return keyDate === null ? MAX_SORT_VALUE : daysBetween(today, keyDate);
     }
     case 'COUNT_UP': {
-      const days = Math.max(0, daysBetween(parseLocalDate(item.date), today));
+      const days = Math.max(0, daysBetween(tryParseLocalDate(item.date) ?? ld(1970, 1, 1), today));
       return item.notificationConfig.includeStartDay ? days + 1 : days;
     }
     case 'BIRTHDAY': {

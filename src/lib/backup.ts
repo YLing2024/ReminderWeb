@@ -9,6 +9,7 @@
  */
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { BackupData, ReminderItem, TagItem } from '../types/reminder';
+import { normalizeReminderList, normalizeTagList } from './normalize';
 
 export const BACKUP_EXTENSION = '.zip';
 export const METADATA_ENTRY = 'metadata.json';
@@ -171,7 +172,13 @@ export function parseBackupData(metadataJson: string): BackupData {
   if (!Array.isArray(record.reminders)) {
     throw new BackupError('metadata.json 缺少 reminders 列表。');
   }
-  return parsed as BackupData;
+  // 安卓 encodeDefaults=false，条目缺省字段必须补齐后再交给渲染层。
+  const tags = record.tags;
+  return {
+    ...(parsed as BackupData),
+    reminders: normalizeReminderList(record.reminders),
+    tags: Array.isArray(tags) ? normalizeTagList(tags) : null,
+  };
 }
 
 /** 备份文件名，与上游 generateBackupFileName 一致：reminder-backup-yyyyMMdd-HHmmss.zip。 */

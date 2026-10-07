@@ -6,7 +6,7 @@
  */
 import type { ReminderItem, ReminderType } from '../types/reminder';
 import { calculateNextTargetDate } from './calendar';
-import { compareLocalDate, parseLocalDate, type LocalDate } from './local-date';
+import { compareLocalDate, tryParseLocalDate, type LocalDate } from './local-date';
 
 export interface SearchCriteria {
   query: string;
@@ -64,7 +64,8 @@ function matchesDate(
   baseDate: LocalDate,
 ): boolean {
   if (from === null && to === null) return true;
-  const ownDate = parseLocalDate(item.date);
+  const ownDate = tryParseLocalDate(item.date);
+  if (ownDate === null) return false;
   if (withinRange(ownDate, from, to)) return true;
   if (item.type === 'COUNT_UP') return false;
   const nextDate = calculateNextTargetDate(item, baseDate);
@@ -77,8 +78,8 @@ export function filterReminders(
   baseDate: LocalDate,
 ): ReminderItem[] {
   const query = criteria.query.trim();
-  const from = criteria.dateFrom === null ? null : parseLocalDate(criteria.dateFrom);
-  const to = criteria.dateTo === null ? null : parseLocalDate(criteria.dateTo);
+  const from = criteria.dateFrom === null ? null : tryParseLocalDate(criteria.dateFrom);
+  const to = criteria.dateTo === null ? null : tryParseLocalDate(criteria.dateTo);
   return reminders.filter((item) => {
     if (criteria.types.length > 0 && !criteria.types.includes(item.type)) return false;
     if (!matchesTags(item, criteria.tags)) return false;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DateParseError,
   daysBetween,
   formatGregorianDate,
   isAfter,
@@ -12,6 +13,7 @@ import {
   plusWeeks,
   plusYears,
   toISODate,
+  tryParseLocalDate,
   weekdayChinese,
 } from './local-date';
 
@@ -25,6 +27,23 @@ describe('local-date 基础运算', () => {
     expect(() => parseLocalDate('2026-13-01')).toThrow();
     expect(() => parseLocalDate('2026-02-30')).toThrow();
     expect(() => parseLocalDate('not-a-date')).toThrow();
+  });
+
+  it('非法输入抛可捕获的业务错误（DateParseError），不抛裸 Error', () => {
+    expect(() => parseLocalDate(undefined)).toThrow(DateParseError);
+    expect(() => parseLocalDate(null)).toThrow(DateParseError);
+    expect(() => parseLocalDate('')).toThrow(DateParseError);
+  });
+
+  it('tryParseLocalDate 对 undefined/null/非法串返回 null，绝不抛异常', () => {
+    expect(tryParseLocalDate(undefined)).toBeNull();
+    expect(tryParseLocalDate(null)).toBeNull();
+    expect(tryParseLocalDate('')).toBeNull();
+    expect(tryParseLocalDate('2026-13-01')).toBeNull();
+    expect(tryParseLocalDate('2026-02-30')).toBeNull();
+    expect(tryParseLocalDate('not-a-date')).toBeNull();
+    expect(tryParseLocalDate(20261007)).toBeNull();
+    expect(tryParseLocalDate('2026-10-07')).toEqual(ld(2026, 10, 7));
   });
 
   it('daysBetween 与方向', () => {

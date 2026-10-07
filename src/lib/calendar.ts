@@ -9,11 +9,12 @@ import {
   isAfter,
   isBefore,
   isEqual,
+  ld,
   plusDays,
   plusMonths,
   plusWeeks,
   plusYears,
-  parseLocalDate,
+  tryParseLocalDate,
   weekdayChinese,
   type LocalDate,
 } from './local-date';
@@ -26,8 +27,16 @@ export interface IntervalStage {
   date: LocalDate;
 }
 
+/** 缺失/非法日期的安全回落（固定常量，纯计算不读时钟）。 */
+const FALLBACK_LOCAL_DATE = ld(1970, 1, 1);
+
 function itemDate(item: ReminderItem): LocalDate {
-  return parseLocalDate(item.date);
+  return tryParseLocalDate(item.date) ?? FALLBACK_LOCAL_DATE;
+}
+
+/** 解析可空的结束日期；缺失/非法一律返回 null，不抛异常。 */
+function endLocalDate(endDate: string | null | undefined): LocalDate | null {
+  return tryParseLocalDate(endDate);
 }
 
 /** 周期开始日向前滚动一步（农历年/月用农历规则，日/周按公历）。 */
@@ -145,12 +154,12 @@ export function calculateCurrentPeriodStart(item: ReminderItem, baseDate: LocalD
  *   已越过结束日时有重复=下一周期开始日、无重复=null。
  */
 export function calculateNextKeyDate(item: ReminderItem, baseDate: LocalDate): LocalDate | null {
-  const endDate = item.endDate;
+  const endDate = endLocalDate(item.endDate);
   const start = itemDate(item);
-  if (item.type !== 'ANNUAL' || endDate === null || isBefore(parseLocalDate(endDate), start)) {
+  if (item.type !== 'ANNUAL' || endDate === null || isBefore(endDate, start)) {
     return calculateNextTargetDate(item, baseDate);
   }
-  const periodOffset = daysBetween(start, parseLocalDate(endDate));
+  const periodOffset = daysBetween(start, endDate);
   const periodStart = calculateCurrentPeriodStart(item, baseDate);
   const periodEnd = plusDays(periodStart, periodOffset);
   if (!isAfter(baseDate, periodStart)) return periodStart;
@@ -164,13 +173,13 @@ export function calculateNextKeyDate(item: ReminderItem, baseDate: LocalDate): L
  * （包含起始日时起始日=第 1 天）；「已过」= 无重复且已越过结束日。
  */
 export function resolveIntervalStage(item: ReminderItem, baseDate: LocalDate): IntervalStage | null {
-  const endDate = item.endDate;
+  const endDate = endLocalDate(item.endDate);
   const start = itemDate(item);
-  if (item.type !== 'ANNUAL' || endDate === null || isBefore(parseLocalDate(endDate), start)) {
+  if (item.type !== 'ANNUAL' || endDate === null || isBefore(endDate, start)) {
     return null;
   }
   const includeStartDay = item.notificationConfig.includeStartDay;
-  const periodOffset = daysBetween(start, parseLocalDate(endDate));
+  const periodOffset = daysBetween(start, endDate);
   const periodStart = calculateCurrentPeriodStart(item, baseDate);
   const periodEnd = plusDays(periodStart, periodOffset);
 

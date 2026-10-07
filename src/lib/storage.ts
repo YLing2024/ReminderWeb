@@ -7,6 +7,7 @@
  */
 import { createStore, del, get, keys, set, clear } from 'idb-keyval';
 import type { ReminderItem, TagItem } from '../types/reminder';
+import { normalizeReminderList, normalizeTagList } from './normalize';
 
 export const DATA_KEY = 'reminderweb:data';
 export const IMAGE_KEY_PREFIX = 'reminderweb:image:';
@@ -80,8 +81,8 @@ export async function loadPersistedData(): Promise<PersistedData> {
   if (!isRecord(raw)) {
     return { reminders: [], tags: [], settings: { ...DEFAULT_SETTINGS } };
   }
-  const reminders = Array.isArray(raw.reminders) ? (raw.reminders as ReminderItem[]) : [];
-  const tags = Array.isArray(raw.tags) ? (raw.tags as TagItem[]) : [];
+  const reminders = Array.isArray(raw.reminders) ? normalizeReminderList(raw.reminders) : [];
+  const tags = Array.isArray(raw.tags) ? normalizeTagList(raw.tags) : [];
   const settings = isRecord(raw.settings)
     ? { ...DEFAULT_SETTINGS, ...(raw.settings as Partial<AppSettings>) }
     : { ...DEFAULT_SETTINGS };

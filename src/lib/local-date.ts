@@ -13,6 +13,14 @@ export interface LocalDate {
 
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+/** 日期解析失败时抛出的业务错误；调用方可按需捕获，不用于驱动整页崩溃。 */
+export class DateParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DateParseError';
+  }
+}
+
 export function ld(year: number, month: number, day: number): LocalDate {
   return { year, month, day };
 }
@@ -33,17 +41,23 @@ export function isValidLocalDate(value: LocalDate): boolean {
   return value.day >= 1 && value.day <= daysInMonth(value.year, value.month);
 }
 
-export function parseLocalDate(text: string): LocalDate {
-  const match = ISO_DATE_RE.exec(text);
-  if (match === null) {
-    throw new Error(`非法日期字符串：${text}`);
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const result = ld(year, month, day);
-  if (!isValidLocalDate(result)) {
-    throw new Error(`非法日期：${text}`);
+/** 安全解析：非法/缺失输入返回 null，绝不抛异常（渲染路径优先使用）。 */
+export function tryParseLocalDate(value: unknown): LocalDate | null {
+  if (typeof value !== 'string') return null;
+  const match = ISO_DATE_RE.exec(value);
+  if (match === null) return null;
+  const result = ld(Number(match[1]), Number(match[2]), Number(match[3]));
+  return isValidLocalDate(result) ? result : null;
+}
+
+/**
+ * 严格解析：失败抛 `DateParseError`（可被捕获的业务错误）。
+ * 渲染路径请用 `tryParseLocalDate`，避免异常冒泡成整页白屏。
+ */
+export function parseLocalDate(value: unknown): LocalDate {
+  const result = tryParseLocalDate(value);
+  if (result === null) {
+    throw new DateParseError(`非法日期字符串：${typeof value === 'string' ? value : String(value)}`);
   }
   return result;
 }

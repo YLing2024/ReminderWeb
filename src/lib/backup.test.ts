@@ -202,3 +202,32 @@ describe('引用图片与内联图片还原', () => {
     expect(Array.from(merged['i.png']!)).toEqual([9, 9]);
   });
 });
+
+describe('导入缺省字段归一化（M3.1 A）', () => {
+  it('parseBackupData 把只有 7 个 key 的条目补齐为完整对象', async () => {
+    const raw = {
+      reminders: [
+        { id: 1, title: '真机', date: '2026-10-07', type: 'ANNUAL', isLunar: false, tag: '', isPinned: false },
+      ],
+      tags: [],
+    };
+    const archive = await encodeArchive({ metadataJson: JSON.stringify(raw) }, true);
+    const content = await decodeArchive(archive);
+    const parsed = parseBackupData(content.metadataJson);
+
+    expect(parsed.reminders[0]!.endDate).toBeNull();
+    expect(parsed.reminders[0]!.repeatInfo).toBeNull();
+    expect(parsed.reminders[0]!.notificationConfig.notificationTimes).toEqual([]);
+    expect(parsed.reminders[0]!.cardBackgroundType).toBe('DEFAULT');
+    expect(parsed.reminders[0]!.customFontWeight).toBe(700);
+  });
+
+  it('标签缺 color/sortOrder 时补默认值', async () => {
+    const raw = { reminders: [], tags: [{ id: 2, name: '节日' }] };
+    const archive = await encodeArchive({ metadataJson: JSON.stringify(raw) }, false);
+    const content = await decodeArchive(archive);
+    const parsed = parseBackupData(content.metadataJson);
+    expect(parsed.tags).toEqual([{ id: 2, name: '节日', color: '#2196F3', sortOrder: 0 }]);
+  });
+});
+
