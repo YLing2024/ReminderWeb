@@ -1,10 +1,10 @@
 /**
- * M9 §1 §2 服务端测试：同步配置读写 / 定时重排 / 云端备份列表、恢复、删除、立即备份、状态新字段。
+ * M9 §1 §2 / M10 §4 服务端测试：同步配置读写 / 定时重排 / 云端备份列表、恢复、删除任意备份、立即备份、状态新字段。
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { DatabaseSync } from 'node:sqlite';
-import { encodeArchive } from '../src/backup-format.ts';
+import { encodeArchive, decodeArchive } from '../src/backup-format.ts';
 import { loadConfig } from '../src/config.ts';
 import { openDatabaseAt } from '../src/db.ts';
 import { readRevision, readServerData } from '../src/data.ts';
@@ -374,7 +374,7 @@ test('status 新字段：nextSyncAt / lastMerged / lastAction', async () => {
   }
 });
 
-test('GET /api/sync/files：列出 name/size/modifiedAt/isOwn，时间倒序', async () => {
+test('GET /api/sync/files：列出 name/size/modifiedAt，时间倒序，不含 isOwn', async () => {
   const fake = createFakeWebDav(() => BASE_CLOCK);
   seedForeign(fake);
   fake.files.set('reminder-backup-20260102-120000.zip', {
@@ -391,11 +391,10 @@ test('GET /api/sync/files：列出 name/size/modifiedAt/isOwn，时间倒序', a
     assert.ok(Array.isArray(body.files));
     assert.equal(body.files.length, 3);
     // 倒序：本服务刚上传（lastModified=BASE_CLOCK）在最前，其次 20260102，最后 20260101。
-    assert.equal(body.files[0]?.isOwn, true);
     assert.equal(typeof body.files[0]?.size, 'number');
+    assert.equal(body.files[0]?.isOwn, undefined, '不再返回 isOwn');
     assert.equal(body.files[1]?.name, 'reminder-backup-20260102-120000.zip');
-    assert.equal(body.files[1]?.isOwn, false);
-    assert.equal(body.files[2]?.isOwn, false);
+    assert.equal(body.files[2]?.name, FOREIGN);
     assert.equal(JSON.stringify(body).includes('topsecret'), false);
   } finally {
     getEngine()?.stop();
@@ -445,6 +444,48 @@ test('POST /api/sync/restore：正常合并、幂等、绝不 DELETE', async () 
   }
 });
 
+test('图片往返：恢复含 images/ 的安卓包后，背景图路径保留并随下次上传的 metadata 输出', async () => {
+  const fake = createFakeWebDav(() => BASE_CLOCK);
+  const withImage = 'reminder-backup-20260104-120000.zip';
+  const item = {
+    ...androidItem(9, '带背景图'),
+    cardBackgroundType: 'IMAGE',
+    cardBackgroundImagePath: 'images/bg.jpg',
+  };
+  fake.files.set(withImage, {
+    bytes: encodeArchive(
+      {
+        metadataJson: JSON.stringify({ reminders: [item], tags: [] }),
+        images: { 'bg.jpg': new Uint8Array([1, 2, 3, 4]) },
+      },
+      false,
+    ),
+    lastModified: BASE_CLOCK - 1,
+    etag: '"img"',
+  });
+  const { ts, getEngine } = await startSyncServer(fake);
+  try {
+    const restored = await fetch(`${ts.url}/api/sync/restore`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: withImage }),
+    });
+    assert.equal(restored.status, 200);
+    const data = readServerData(ts.db);
+    assert.equal(data.reminders[0]?.cardBackgroundImagePath, 'images/bg.jpg');
+
+    const upload = (await (await fetch(`${ts.url}/api/sync/upload`, { method: 'POST' })).json()) as { name: string };
+    const uploaded = fake.files.get(upload.name);
+    assert.ok(uploaded !== undefined);
+    const content = decodeArchive(uploaded.bytes);
+    const metadata = JSON.parse(content.metadataJson) as { reminders: Array<Record<string, unknown>> };
+    assert.equal(metadata.reminders[0]?.cardBackgroundImagePath, 'images/bg.jpg');
+  } finally {
+    getEngine()?.stop();
+    await ts.close();
+  }
+});
+
 test('POST /api/sync/restore：名字非法 400 / 不存在 404 / 坏包 400', async () => {
   const fake = createFakeWebDav(() => BASE_CLOCK);
   fake.files.set('reminder-backup-20260103-120000.zip', {
@@ -472,33 +513,36 @@ test('POST /api/sync/restore：名字非法 400 / 不存在 404 / 坏包 400', a
   }
 });
 
-test('DELETE /api/sync/files/:name：只能删自己的，别人的 403，不存在 404', async () => {
+test('DELETE /api/sync/files/:name：任何本应用备份都能删，非本应用名 400，不存在 404', async () => {
   const fake = createFakeWebDav(() => BASE_CLOCK);
   seedForeign(fake);
+  // 同目录下的非备份文件：删除操作绝不允许碰它。
+  fake.files.set('notes.txt', { bytes: new TextEncoder().encode('keep me'), lastModified: BASE_CLOCK, etag: '"n"' });
   const { ts, getEngine } = await startSyncServer(fake);
   try {
     const upload = (await (await fetch(`${ts.url}/api/sync/upload`, { method: 'POST' })).json()) as { name: string };
     assert.ok(upload.name.startsWith('reminder-backup-'));
 
+    // 其它设备上传的包也能删除（不再 403）。
     const foreign = await fetch(`${ts.url}/api/sync/files/${FOREIGN}`, { method: 'DELETE' });
-    assert.equal(foreign.status, 403);
-    const foreignBody = (await foreign.json()) as Record<string, unknown>;
-    assert.equal(foreignBody.error, 'forbidden');
-    assert.match(String(foreignBody.message), /只能删除本服务上传/);
-    assert.equal(fake.files.has(FOREIGN), true);
+    assert.equal(foreign.status, 200);
+    assert.equal(fake.files.has(FOREIGN), false);
+    assert.equal(fake.files.has('notes.txt'), true, '绝不碰同目录其它文件');
 
     const missing = await fetch(`${ts.url}/api/sync/files/reminder-backup-20200101-000000.zip`, { method: 'DELETE' });
     assert.equal(missing.status, 404);
 
-    const invalid = await fetch(`${ts.url}/api/sync/files/evil.sh`, { method: 'DELETE' });
+    // 非 reminder-backup-*.zip 一律拒绝（即使文件真的存在）。
+    const invalid = await fetch(`${ts.url}/api/sync/files/notes.txt`, { method: 'DELETE' });
     assert.equal(invalid.status, 400);
+    assert.equal(fake.files.has('notes.txt'), true);
 
     const own = await fetch(`${ts.url}/api/sync/files/${upload.name}`, { method: 'DELETE' });
     assert.equal(own.status, 200);
     assert.equal(fake.files.has(upload.name), false);
 
     const after = (await (await fetch(`${ts.url}/api/sync/files`)).json()) as { files: unknown[] };
-    assert.equal(after.files.length, 1, '列表里只剩别人的包');
+    assert.equal(after.files.length, 0, '两份备份都已删除');
   } finally {
     getEngine()?.stop();
     await ts.close();

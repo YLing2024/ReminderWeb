@@ -6,9 +6,9 @@
  * - `GET  /api/sync/status`：同步状态（含 nextSyncAt / lastMerged / lastAction）。
  * - `POST /api/sync/now`：立即双向同步。
  * - `POST /api/sync/upload`：立即备份（只上传，不拉取）。
- * - `GET  /api/sync/files`：云端备份列表（含 isOwn）。
+ * - `GET  /api/sync/files`：云端备份列表（时间倒序）。
  * - `POST /api/sync/restore`：从指定备份恢复（只读，绝不删除远端文件）。
- * - `DELETE /api/sync/files/:name`：删除本服务上传的备份（别人的 403）。
+ * - `DELETE /api/sync/files/:name`：删除云端任意本应用备份（含其它设备上传的；仅限 reminder-backup-*.zip）。
  */
 import type { RouteContext, RouteResponse } from '../http.ts';
 import { SyncActionError, type SyncStatus } from '../sync.ts';

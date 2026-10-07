@@ -71,8 +71,6 @@ export interface RemoteBackupEntry {
   name: string;
   size: number;
   modifiedAt: number;
-  /** 是否由本服务上传（决定能否删除）。 */
-  isOwn: boolean;
 }
 
 export interface RestoreResult {
@@ -316,18 +314,16 @@ export class SyncEngine {
     });
   }
 
-  /** 列出云端备份（含 isOwn）；不复用运行中的同步。 */
+  /** 列出云端备份（时间倒序）；任何 reminder-backup-*.zip 都可恢复。 */
   async listFiles(): Promise<RemoteBackupEntry[]> {
     const client = webDavConfigFrom(this.config);
     const dep = this.deps.fetchImpl === undefined ? {} : { fetchImpl: this.deps.fetchImpl };
     const files = await listBackups(client, dep);
     this.remoteFiles = files;
-    const own = new Set(this.uploadedNames());
     return files.map((file) => ({
       name: file.name,
       size: file.size,
       modifiedAt: file.lastModified,
-      isOwn: own.has(file.name),
     }));
   }
 
@@ -370,7 +366,7 @@ export class SyncEngine {
     });
   }
 
-  /** 删除云端备份（`DELETE /api/sync/files/:name`）：只允许删自己上传的。 */
+  /** 删除云端备份（`DELETE /api/sync/files/:name`）：任何本应用备份都可删除，但绝不碰同目录其它文件。 */
   async deleteRemote(name: string): Promise<'deleted' | null> {
     if (!isValidBackupName(name)) throw new SyncActionError(400, 'invalid_name', '备份文件名不合法');
     return this.serialize<'deleted'>(async () => {
@@ -379,9 +375,6 @@ export class SyncEngine {
       const files = await listBackups(client, dep);
       this.remoteFiles = files;
       if (!files.some((file) => file.name === name)) throw new SyncActionError(404, 'not_found', '云端没有这份备份');
-      if (!this.uploadedNames().includes(name)) {
-        throw new SyncActionError(403, 'forbidden', '只能删除本服务上传的备份，不能删除其他设备上传的备份');
-      }
       await deleteFile(client, name, dep);
       this.saveUploadedNames(this.uploadedNames().filter((entry) => entry !== name));
       this.remoteFiles = this.remoteFiles.filter((file) => file.name !== name);
