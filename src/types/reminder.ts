@@ -120,11 +120,19 @@ export const DEFAULT_NOTIFICATION_CONFIG: ReminderNotificationConfig = {
 /** 生日默认按年重复（上游生日即年度事件）；新增/切换为生日的默认值。 */
 export const BIRTHDAY_REPEAT: RepeatInfo = { interval: 1, unit: 'YEAR', endDate: null };
 
-/** 按上游默认值构造一个新提醒（id 由 store 分配）。 */
-export function createReminderItem(partial: Pick<ReminderItem, 'title' | 'date' | 'type'> & Partial<ReminderItem>): ReminderItem {
-  const item: ReminderItem = {
+/**
+ * 提醒的「全字段默认值」表（对齐 Kotlin `ReminderItem` 的默认参数）。
+ * 每次返回新对象，嵌套对象也重新构造，避免调用方共享引用后互相污染。
+ *
+ * 该函数是归一化（`lib/normalize`）的基准：任何缺失字段都回落到这里的值。
+ */
+export function defaultReminderFields(): ReminderItem {
+  return {
     id: 0,
+    title: '',
+    date: '',
     endDate: null,
+    type: 'ANNUAL',
     isLunar: false,
     tag: '',
     isPinned: false,
@@ -150,8 +158,12 @@ export function createReminderItem(partial: Pick<ReminderItem, 'title' | 'date' 
     customFontShadowEnabled: false,
     customFontStrokeEnabled: false,
     customFontStrokeColor: '',
-    ...partial,
   };
+}
+
+/** 按上游默认值构造一个新提醒（id 由 store 分配）。 */
+export function createReminderItem(partial: Pick<ReminderItem, 'title' | 'date' | 'type'> & Partial<ReminderItem>): ReminderItem {
+  const item: ReminderItem = { ...defaultReminderFields(), ...partial };
   // 新增生日（且调用方未显式指定重复）时自动补「每 1 年」。
   if (item.type === 'BIRTHDAY' && item.repeatInfo === null && partial.repeatInfo === undefined) {
     item.repeatInfo = { ...BIRTHDAY_REPEAT };
