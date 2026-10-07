@@ -159,3 +159,34 @@ export async function verifyStoredPassword(password: string, stored: StoredAppLo
   if (!isAppLockCredential(stored)) return { ok: false, upgraded: null };
   return { ok: await verifyCredential(password, stored), upgraded: null };
 }
+
+/** 设置 / 修改流程的结果：成功带新凭据，失败带可直接展示的中文原因。 */
+export type LockFlowResult =
+  | { ok: true; credential: AppLockCredential }
+  | { ok: false; error: string };
+
+/** 首次设置：二次确认必须一致。 */
+export async function setupLockPassword(password: string, confirm: string): Promise<LockFlowResult> {
+  if (!isValidPassword(password)) return { ok: false, error: '密码长度需为 1–128 个字符' };
+  if (password !== confirm) return { ok: false, error: '两次输入不一致' };
+  return { ok: true, credential: await hashPassword(password) };
+}
+
+/** 修改：先验当前密码，再校验新密码与二次确认。 */
+export async function changeLockPassword(
+  current: string,
+  next: string,
+  confirm: string,
+  stored: StoredAppLock,
+): Promise<LockFlowResult> {
+  const verified = await verifyStoredPassword(current, stored);
+  if (!verified.ok) return { ok: false, error: '当前密码不正确' };
+  if (!isValidPassword(next)) return { ok: false, error: '密码长度需为 1–128 个字符' };
+  if (next !== confirm) return { ok: false, error: '两次输入不一致' };
+  return { ok: true, credential: await hashPassword(next) };
+}
+
+/** 清除：需当前密码正确。 */
+export async function clearLockPassword(current: string, stored: StoredAppLock): Promise<boolean> {
+  return (await verifyStoredPassword(current, stored)).ok;
+}

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   PASSWORD_MAX_LENGTH,
+  changeLockPassword,
+  clearLockPassword,
   hashLegacyPassword,
   hashPassword,
   isAppLockCredential,
   isValidPassword,
+  setupLockPassword,
   verifyCredential,
   verifyStoredPassword,
 } from './app-lock';
@@ -77,5 +80,47 @@ describe('verifyStoredPassword（v1 兼容与自动升级）', () => {
     expect(ok).toEqual({ ok: true, upgraded: null });
     const bad = await verifyStoredPassword('不是它', credential);
     expect(bad).toEqual({ ok: false, upgraded: null });
+  });
+});
+
+describe('设置 / 修改 / 清除流程', () => {
+  it('设置：二次确认不一致或非法长度时给出中文错误', async () => {
+    const mismatch = await setupLockPassword('abc', 'abd');
+    expect(mismatch).toEqual({ ok: false, error: '两次输入不一致' });
+    const tooLong = await setupLockPassword('x'.repeat(129), 'x'.repeat(129));
+    expect(tooLong).toEqual({ ok: false, error: '密码长度需为 1–128 个字符' });
+    const empty = await setupLockPassword('', '');
+    expect(empty).toEqual({ ok: false, error: '密码长度需为 1–128 个字符' });
+  });
+
+  it('设置：一字密码（含中文 emoji）可保存并可用', async () => {
+    const result = await setupLockPassword('🔒 中文', '🔒 中文');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(await verifyCredential('🔒 中文', result.credential)).toBe(true);
+  });
+
+  it('修改：当前密码错误时拒绝', async () => {
+    const credential = await hashPassword('旧密码');
+    const result = await changeLockPassword('不是旧密码', '新密码', '新密码', credential);
+    expect(result).toEqual({ ok: false, error: '当前密码不正确' });
+  });
+
+  it('修改：当前正确但两次新密码不一致时拒绝', async () => {
+    const credential = await hashPassword('旧密码');
+    const result = await changeLockPassword('旧密码', '新密码', '新密码x', credential);
+    expect(result).toEqual({ ok: false, error: '两次输入不一致' });
+  });
+
+  it('修改：全部正确时返回可用新凭据', async () => {
+    const credential = await hashPassword('旧密码');
+    const result = await changeLockPassword('旧密码', '新密码', '新密码', credential);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(await verifyCredential('新密码', result.credential)).toBe(true);
+  });
+
+  it('清除：需正确密码', async () => {
+    const credential = await hashPassword('要清掉的密码');
+    expect(await clearLockPassword('错误', credential)).toBe(false);
+    expect(await clearLockPassword('要清掉的密码', credential)).toBe(true);
   });
 });
