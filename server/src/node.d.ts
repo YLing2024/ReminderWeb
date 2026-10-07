@@ -26,6 +26,20 @@ declare const console: {
 declare function setTimeout(handler: () => void, timeout?: number): unknown;
 declare function clearTimeout(handle: unknown): void;
 
+declare class AbortController {
+  readonly signal: unknown;
+  abort(): void;
+}
+
+declare class TextEncoder {
+  encode(input?: string): Uint8Array;
+}
+
+declare class TextDecoder {
+  constructor(label?: string);
+  decode(input?: Uint8Array): string;
+}
+
 interface Response {
   readonly status: number;
   readonly ok: boolean;
@@ -41,7 +55,7 @@ interface Response {
 interface RequestInit {
   method?: string;
   headers?: Record<string, string>;
-  body?: string;
+  body?: string | Uint8Array | ArrayBuffer | null;
   signal?: unknown;
 }
 
@@ -51,6 +65,7 @@ declare class Buffer extends Uint8Array {
   static from(data: string, encoding?: string): Buffer;
   static from(data: ArrayBuffer | Uint8Array): Buffer;
   static concat(list: readonly Uint8Array[], totalLength?: number): Buffer;
+  static alloc(size: number, fill?: number): Buffer;
   static byteLength(data: string, encoding?: string): number;
   toString(encoding?: string): string;
 }
@@ -80,6 +95,21 @@ declare module 'node:crypto' {
     digest(encoding: string): string;
   }
   export function createHash(algorithm: string): Hash;
+  export interface Cipher {
+    update(data: Uint8Array): Buffer;
+    final(): Buffer;
+  }
+  export interface Decipher {
+    update(data: Uint8Array): Buffer;
+    final(): Buffer;
+  }
+  export function createCipheriv(algorithm: string, key: Uint8Array, iv: Uint8Array): Cipher;
+  export function createDecipheriv(algorithm: string, key: Uint8Array, iv: Uint8Array): Decipher;
+}
+
+declare module 'node:zlib' {
+  export function deflateRawSync(data: Uint8Array, options?: unknown): Buffer;
+  export function inflateRawSync(data: Uint8Array, options?: unknown): Buffer;
 }
 
 declare module 'node:sqlite' {
