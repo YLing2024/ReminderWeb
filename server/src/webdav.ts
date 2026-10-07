@@ -88,6 +88,11 @@ export function isBackupName(name: string): boolean {
   return name.startsWith(BACKUP_FILE_PREFIX) && name.toLowerCase().endsWith('.zip');
 }
 
+/** 是否为严格合法的备份文件名（`reminder-backup-<yyyyMMdd-HHmmss>.zip`）。 */
+export function isValidBackupName(name: string): boolean {
+  return /^reminder-backup-\d{8}-\d{6}\.zip$/.test(name);
+}
+
 /** 从 href 取 basename（去查询串并解码）。 */
 export function fileNameFromHref(href: string): string {
   const path = href.split('?')[0]!.split('#')[0]!;

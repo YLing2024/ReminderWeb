@@ -42,6 +42,13 @@ export interface MergeOutcome {
   changed: boolean;
 }
 
+/** 合并带来的条目变化计数（用于「已合并 N 条」）。 */
+export interface ChangeCounts {
+  updated: number;
+  added: number;
+  removed: number;
+}
+
 interface Row {
   id: number;
   updatedAt: number;
@@ -163,6 +170,74 @@ export function mergeData(server: ServerData, client: MergeInput): MergeOutcome 
     tombstones: [...reminders.tombstones, ...tags.tombstones],
     changed,
   };
+}
+
+interface Signature {
+  updatedAt: number;
+  deleted: boolean;
+}
+
+function signatureMap(items: WireItem[], tombstones: WireTombstone[]): Map<number, Signature> {
+  const map = new Map<number, Signature>();
+  for (const item of items) map.set(item.id, { updatedAt: item.updatedAt, deleted: false });
+  for (const tomb of tombstones) {
+    const existing = map.get(tomb.id);
+    if (existing === undefined || tomb.updatedAt >= existing.updatedAt) {
+      map.set(tomb.id, { updatedAt: tomb.updatedAt, deleted: true });
+    }
+  }
+  return map;
+}
+
+function countKind(before: Map<number, Signature>, after: Map<number, Signature>, counts: ChangeCounts): void {
+  const ids = new Set<number>([...before.keys(), ...after.keys()]);
+  for (const id of ids) {
+    const old = before.get(id);
+    const next = after.get(id);
+    if (next === undefined) {
+      if (old !== undefined && !old.deleted) counts.removed += 1;
+      continue;
+    }
+    if (old === undefined) {
+      if (next.deleted) counts.removed += 1;
+      else counts.added += 1;
+      continue;
+    }
+    if (old.deleted !== next.deleted) {
+      if (next.deleted) counts.removed += 1;
+      else counts.added += 1;
+      continue;
+    }
+    if (old.updatedAt !== next.updatedAt) counts.updated += 1;
+  }
+}
+
+/**
+ * 对比合并前后的服务端状态，统计「更新 / 新增 / 删除」条目数；
+ * 设置信封发生变化时计入 `updated` 一次。纯函数，供自动同步与恢复共用。
+ */
+export function countChanges(before: ServerData, outcome: MergeOutcome): ChangeCounts {
+  const counts: ChangeCounts = { updated: 0, added: 0, removed: 0 };
+  const reminderBefore = signatureMap(
+    before.reminders,
+    before.tombstones.filter((t) => t.kind === 'reminder'),
+  );
+  const tagBefore = signatureMap(
+    before.tags,
+    before.tombstones.filter((t) => t.kind === 'tag'),
+  );
+  const reminderAfter = signatureMap(
+    outcome.reminders,
+    outcome.tombstones.filter((t) => t.kind === 'reminder'),
+  );
+  const tagAfter = signatureMap(
+    outcome.tags,
+    outcome.tombstones.filter((t) => t.kind === 'tag'),
+  );
+  countKind(reminderBefore, reminderAfter, counts);
+  countKind(tagBefore, tagAfter, counts);
+  if (outcome.settings.updatedAt !== before.settings.updatedAt) counts.updated += 1;
+  return counts;
 }
 
 /* ------------------------------------------------------------------ */

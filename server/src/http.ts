@@ -14,7 +14,16 @@ import { createLogger, type Logger } from './log.ts';
 import { handleGetData, handlePutData } from './routes/data.ts';
 import { handleLogin, handleLogout, handleMe } from './routes/auth.ts';
 import { handleHealth, handleVersion } from './routes/health.ts';
-import { handleSyncNow, handleSyncStatus } from './routes/sync.ts';
+import {
+  handleSyncConfigGet,
+  handleSyncConfigPut,
+  handleSyncDeleteFile,
+  handleSyncFiles,
+  handleSyncNow,
+  handleSyncRestore,
+  handleSyncStatus,
+  handleSyncUpload,
+} from './routes/sync.ts';
 import type { SyncEngine } from './sync.ts';
 
 /** 请求体大小上限：2 MiB（需求 §6.2）。 */
@@ -216,8 +225,14 @@ async function dispatch(ctx: RouteContext): Promise<RouteResponse> {
   if (key === 'GET /api/auth/me') return handleMe(ctx);
   if (key === 'GET /api/data') return handleGetData(ctx);
   if (key === 'PUT /api/data') return handlePutData(ctx);
+  if (key === 'GET /api/sync/config') return handleSyncConfigGet(ctx);
+  if (key === 'PUT /api/sync/config') return handleSyncConfigPut(ctx);
   if (key === 'GET /api/sync/status') return handleSyncStatus(ctx);
   if (key === 'POST /api/sync/now') return handleSyncNow(ctx);
+  if (key === 'POST /api/sync/upload') return handleSyncUpload(ctx);
+  if (key === 'GET /api/sync/files') return handleSyncFiles(ctx);
+  if (key === 'POST /api/sync/restore') return handleSyncRestore(ctx);
+  if (ctx.method === 'DELETE' && ctx.path.startsWith('/api/sync/files/')) return handleSyncDeleteFile(ctx);
   return { status: 404, body: { error: 'not_found' } };
 }
 
