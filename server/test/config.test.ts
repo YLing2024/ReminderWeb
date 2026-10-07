@@ -57,3 +57,47 @@ test('none 模式 + 开发 + 非回环 可启动', () => {
   const config = loadConfig({ AUTH_MODE: 'none', HOST: '0.0.0.0', NODE_ENV: 'development' });
   assert.equal(config.authMode, 'none');
 });
+
+test('WebDAV 默认关闭，参数取默认值', () => {
+  const config = loadConfig({});
+  assert.equal(config.webdavEnabled, false);
+  assert.equal(config.webdavUrl, '');
+  assert.equal(config.webdavIntervalMinutes, 10);
+  assert.equal(config.webdavDebounceSeconds, 60);
+  assert.equal(config.webdavEncrypt, true);
+  assert.equal(config.webdavKeep, 10);
+  assert.equal(config.webdavTimeoutSeconds, 20);
+});
+
+test('WebDAV：启用但缺 URL 时拒绝启动', () => {
+  assert.throws(() => loadConfig({ WEBDAV_ENABLED: '1' }), /WEBDAV_URL/);
+  assert.throws(() => loadConfig({ WEBDAV_ENABLED: '1', WEBDAV_URL: '   ' }), /WEBDAV_URL/);
+});
+
+test('WebDAV：合法配置解析（含布尔与整数边界）', () => {
+  const config = loadConfig({
+    WEBDAV_ENABLED: '1',
+    WEBDAV_URL: 'https://dav.example.com/reminder/',
+    WEBDAV_USERNAME: 'davuser',
+    WEBDAV_PASSWORD: 'secret',
+    WEBDAV_INTERVAL_MINUTES: '1',
+    WEBDAV_DEBOUNCE_SECONDS: '0',
+    WEBDAV_ENCRYPT: '0',
+    WEBDAV_KEEP: '3',
+    WEBDAV_TIMEOUT_SECONDS: '5',
+  });
+  assert.equal(config.webdavEnabled, true);
+  assert.equal(config.webdavUrl, 'https://dav.example.com/reminder/');
+  assert.equal(config.webdavIntervalMinutes, 1);
+  assert.equal(config.webdavDebounceSeconds, 0);
+  assert.equal(config.webdavEncrypt, false);
+  assert.equal(config.webdavKeep, 3);
+  assert.equal(config.webdavTimeoutSeconds, 5);
+});
+
+test('WebDAV：非法参数抛错', () => {
+  assert.throws(() => loadConfig({ WEBDAV_INTERVAL_MINUTES: '0' }), ConfigError);
+  assert.throws(() => loadConfig({ WEBDAV_KEEP: '0' }), ConfigError);
+  assert.throws(() => loadConfig({ WEBDAV_TIMEOUT_SECONDS: '9999' }), ConfigError);
+  assert.throws(() => loadConfig({ WEBDAV_ENCRYPT: 'maybe' }), ConfigError);
+});

@@ -40,6 +40,16 @@ declare class TextDecoder {
   decode(input?: Uint8Array): string;
 }
 
+declare class URL {
+  constructor(input: string, base?: string);
+  protocol: string;
+  username: string;
+  password: string;
+  hash: string;
+  pathname: string;
+  href: string;
+}
+
 interface Response {
   readonly status: number;
   readonly ok: boolean;

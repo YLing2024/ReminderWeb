@@ -24,6 +24,21 @@ export interface Config {
   nodeEnv: string;
   /** 由后端直接服务的静态产物目录（构建产物 dist/）。 */
   staticDir: string;
+  /** WebDAV 双向同步（M7）。 */
+  webdavEnabled: boolean;
+  webdavUrl: string;
+  webdavUsername: string;
+  webdavPassword: string;
+  /** 定时轮询远端间隔（分钟，下限 1）。 */
+  webdavIntervalMinutes: number;
+  /** 本机数据变动后的延迟上传（秒，合并节流）。 */
+  webdavDebounceSeconds: number;
+  /** 上传的包是否加密（与安卓端「备份数据加密」一致）。 */
+  webdavEncrypt: boolean;
+  /** 仅保留最近 N 份由本服务上传的备份。 */
+  webdavKeep: number;
+  /** 单次 HTTP 请求超时（秒）。 */
+  webdavTimeoutSeconds: number;
 }
 
 /** 配置错误：`message` 可直接展示给运维。 */
@@ -92,6 +107,18 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     );
   }
 
+  // WebDAV 双向同步（M7）。凭据只从环境变量读取，绝不写日志、绝不返回前端。
+  const webdavEnabled = parseBoolean('WEBDAV_ENABLED', env.WEBDAV_ENABLED, false);
+  const webdavUrl = env.WEBDAV_URL === undefined ? '' : env.WEBDAV_URL.trim();
+  if (webdavEnabled && webdavUrl === '') {
+    throw new ConfigError('WEBDAV_ENABLED=1 时必须设置 WEBDAV_URL（WebDAV 目录地址）。');
+  }
+  const webdavIntervalMinutes = parseInteger('WEBDAV_INTERVAL_MINUTES', env.WEBDAV_INTERVAL_MINUTES, 10, 1, 1440);
+  const webdavDebounceSeconds = parseInteger('WEBDAV_DEBOUNCE_SECONDS', env.WEBDAV_DEBOUNCE_SECONDS, 60, 0, 86_400);
+  const webdavEncrypt = parseBoolean('WEBDAV_ENCRYPT', env.WEBDAV_ENCRYPT, true);
+  const webdavKeep = parseInteger('WEBDAV_KEEP', env.WEBDAV_KEEP, 10, 1, 1000);
+  const webdavTimeoutSeconds = parseInteger('WEBDAV_TIMEOUT_SECONDS', env.WEBDAV_TIMEOUT_SECONDS, 20, 1, 600);
+
   return {
     host,
     port,
@@ -106,6 +133,15 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     logLevel,
     nodeEnv,
     staticDir: resolve(process.cwd(), 'dist'),
+    webdavEnabled,
+    webdavUrl,
+    webdavUsername: env.WEBDAV_USERNAME ?? '',
+    webdavPassword: env.WEBDAV_PASSWORD ?? '',
+    webdavIntervalMinutes,
+    webdavDebounceSeconds,
+    webdavEncrypt,
+    webdavKeep,
+    webdavTimeoutSeconds,
   };
 }
 
@@ -116,5 +152,6 @@ export function describeConfig(config: Config): string {
     `认证模式 ${config.authMode}`,
     `数据目录 ${config.dataDir}`,
     `静态文件 ${config.serveStatic ? config.staticDir : '关闭'}`,
+    `WebDAV ${config.webdavEnabled ? `同步到 ${config.webdavUrl}` : '关闭'}`,
   ].join(' | ');
 }
