@@ -6,7 +6,7 @@ import { useReminderStore } from './store/useReminderStore';
 
 const EditPage = lazy(() => import('./pages/EditPage'));
 const DetailPage = lazy(() => import('./pages/DetailPage'));
-const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
+const SearchPage = lazy(() => import('./pages/SearchPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 
@@ -26,7 +26,7 @@ export default function App() {
         <Route path="/reminder/new" element={<EditPage />} />
         <Route path="/reminder/:id/edit" element={<EditPage />} />
         <Route path="/reminder/:id" element={<DetailPage />} />
-        <Route path="/search" element={<PlaceholderPage title="搜索" />} />
+        <Route path="/search" element={<SearchPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
