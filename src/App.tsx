@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { ThemeController } from './components/ThemeController';
 import HomePage from './pages/HomePage';
 import { useReminderStore } from './store/useReminderStore';
 
@@ -19,6 +20,7 @@ export default function App() {
 
   return (
     <Suspense fallback={<div style={{ padding: 24, textAlign: 'center' }}>正在载入…</div>}>
+      <ThemeController />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/reminder/new" element={<EditPage />} />

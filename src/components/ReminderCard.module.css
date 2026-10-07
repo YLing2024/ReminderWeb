@@ -47,7 +47,7 @@
   justify-content: center;
   gap: 4px;
   padding: 12px 8px;
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 4%, var(--md-sys-color-surface));
+  background: var(--app-card-body-bg);
   min-height: 96px;
 }
 
@@ -73,7 +73,7 @@
   /* 固定三区之一：底带高度恒定，主体吸收行内剩余高度 */
   flex: none;
   padding: 8px;
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 7%, var(--md-sys-color-surface));
+  background: var(--app-card-footer-bg);
 }
 
 .footerText {

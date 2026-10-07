@@ -40,7 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   viewMode: 'CARD',
   scrollBehavior: 'AUTO_HIDE',
   dynamicColorEnabled: true,
-  themeColorPalette: 'BLUE',
+  themeColorPalette: 'PURPLE',
   customColorSeed: null,
 };
 
