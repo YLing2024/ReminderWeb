@@ -2,7 +2,7 @@
 
 把安卓应用 **Reminder**（纪念日 / 倒数日管理）做成响应式 Web 应用：视觉风格一致、行为语义一致、**数据与安卓版双向互通**。
 
-- 纯静态、本地优先：无后端、无账号、无数据库；数据存浏览器 IndexedDB。
+- 两种运行方式：默认**本地模式**（纯静态，数据存浏览器 IndexedDB，无账号无后端）；也可配套仓库自带的 **Node.js + SQLite 后端**（推荐），由服务器保存唯一真数据，多设备一致。
 - 与安卓版共用备份格式（zip + AES/CBC 加密），可互相导入导出。
 - 许可：**GPL-3.0**。
 
@@ -32,6 +32,7 @@
 | 应用内检查更新 | 改为「关于页显示版本 + 仓库链接」 |
 | 液态玻璃 / 光栅玻璃 / 折射参数 | 不实现视觉效果，但**备份字段原样保留** |
 | 后台精确唤醒提醒 | 页面打开时用 Notification API；另提供 Service Worker 周期检查（能力受限时明确提示） |
+| 本地数据库 | 可选后端（Node.js + SQLite）为**唯一真数据源**；前端 IndexedDB 降级为只读离线缓存（M7 起后端与 WebDAV 互通）。未部署后端时回落本地模式，界面上会明确标注 |
 | WebDAV 云备份 | **已支持**：纯前端 `fetch` 实现（PROPFIND / MKCOL / PUT / GET / DELETE + Basic 认证），产物与本地导出逐字节一致。需服务器允许跨站访问（CORS），或改用与本页面同源的地址 |
 
 ## 技术栈
@@ -58,11 +59,109 @@ npm run preview
 # 代码检查 / 单元测试
 npm run lint
 npm test
+
+# 后端（可选）：直接运行 TypeScript（Node ≥ 24），无需编译
+npm run dev:server      # 开发：node --watch server/src/index.ts
+npm start               # 生产：node server/src/index.ts
+
+# 后端类型检查 / node:test 测试
+npm run typecheck:server
+npm run test:server
 ```
 
 部署：`npm run build` 后把 `dist/` 作为静态站点托管即可。应用使用 `BrowserRouter`，
 需将未知路径回退到 `index.html`（例如 Nginx 的 `try_files $uri /index.html;`）。
-Service Worker 与 manifest 在构建时自动生成。
+Service Worker 与 manifest 在构建时自动生成。若启用内置后端，后端会在构建产物存在时
+直接服务 `dist/`，无需额外静态托管（见下一节）。
+
+## 部署（后端模式）
+
+后端零运行时依赖：只用 Node 内置模块（`node:sqlite` / `node:crypto` / `node:http`），
+源码即 TypeScript，由 Node ≥ 24 直接运行（`node server/src/index.ts`），无需构建。
+前端构建期可用 `VITE_API_BASE` 指定后端地址（留空 = 与页面同源 `/api`）。
+
+### 环境变量
+
+复制 `.env.example` 为 `.env` 并按需修改（示例值均为占位符，切勿使用真实凭据）：
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `HOST` | `127.0.0.1` | 监听地址。`AUTH_MODE=sso` 时必须保持回环，否则拒绝启动 |
+| `PORT` | `18940` | 监听端口 |
+| `DATA_DIR` | `./server/data` | 数据目录（SQLite 数据库 `reminder.db`） |
+| `AUTH_MODE` | `builtin` | `builtin` / `sso` / `none` |
+| `AUTH_USER` | `admin` | builtin 用户名 |
+| `AUTH_PASSWORD` | 空 | builtin 初始口令；首次启动时建立，明文不入库、不落日志。留空且库中无口令时生成一次性随机口令并只打印一次 |
+| `SESSION_TTL_DAYS` | `30` | 会话有效期（天） |
+| `LOGIN_RATE_LIMIT` | `5` | 每 IP 每 10 分钟允许的登录失败次数 |
+| `TRUST_PROXY` | `1` | 是否信任 `X-Forwarded-For`（取真实 IP 做限流） |
+| `SERVE_STATIC` | `1` | 是否由后端服务 `dist/`（纯 API 部署可关） |
+| `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `VITE_API_BASE` | 空 | 前端构建期的后端地址前缀；空 = 同源 `/api` |
+
+`WEBDAV_*` 为 M7 预留，M6 暂未启用。
+
+### 启动
+
+```bash
+npm install
+npm run build            # 生成 dist/
+AUTH_MODE=builtin AUTH_PASSWORD=changeme npm start
+# 启动日志会打印监听地址、认证模式、数据目录与静态目录（绝不打印口令/令牌）
+```
+
+### systemd（示例）
+
+```ini
+[Unit]
+Description=ReminderWeb backend
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/reminderweb
+EnvironmentFile=/opt/reminderweb/.env
+ExecStart=/usr/bin/node server/src/index.ts
+Restart=on-failure
+User=reminderweb
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### nginx 反向代理（示例）
+
+后端只监听 `127.0.0.1:18940`，由 nginx 终止 TLS 并转发。
+`__Host-rw_session` Cookie 要求 HTTPS，请务必通过 nginx 提供 HTTPS。
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name reminder.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:18940;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### builtin 与 sso 如何选
+
+- **builtin（默认，开源用户）**：后端自带账号密码。首次启动用 `AUTH_PASSWORD` 建立，
+  或留空让后端生成一次性随机口令（登录后在数据设置里改）。前端 401 时会弹出内置登录界面。
+- **sso（本人部署）**：由前置网关完成登录并注入 `X-Auth-User` 头，后端只读该头，不使用 Cookie。
+  此时 `HOST` 必须保持回环（`127.0.0.1` / `::1` / `localhost`），否则拒绝启动，防止伪造头绕过网关。
+  前端 401 时跳转 `/_auth/login?next=<当前路径>`。
+- **none**：仅本机开发，所有请求视为用户 `dev`；非回环 + `NODE_ENV=production` 时拒绝启动。
+
+### 数据目录与备份
+
+- SQLite 数据库与 WAL 文件位于 `DATA_DIR`（默认 `server/data/`，已在 `.gitignore` 中忽略）。
+- 备份：停止服务后直接复制整个 `DATA_DIR` 即可；也可用 SQLite 的 `.backup` 命令做在线备份。
+- 数据模型：`reminders` / `tags` 用条目级 `updatedAt` + 墓碑合并，`settings` 整体同步；
+  应用锁、WebDAV 凭据、通知权限等**仅本机**设置不会上传服务器。
 
 ## 备份格式（与安卓互通）
 
