@@ -19,6 +19,7 @@ export function PasswordField({
   autoFocus = false,
   placeholder,
   ariaLabel,
+  disabled = false,
 }: {
   label?: string;
   value: string;
@@ -29,6 +30,7 @@ export function PasswordField({
   autoFocus?: boolean;
   placeholder?: string;
   ariaLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className={styles.wrap}>
@@ -43,6 +45,7 @@ export function PasswordField({
           placeholder={placeholder}
           aria-label={ariaLabel ?? label}
           value={value}
+          disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'center' })}
         />
@@ -51,6 +54,7 @@ export function PasswordField({
           className={styles.toggle}
           aria-label={visible ? '隐藏密码' : '显示密码'}
           aria-pressed={visible}
+          disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={onToggleVisible}
         >

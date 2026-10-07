@@ -128,10 +128,33 @@ export interface SyncConfig {
   url: string;
 }
 
-/** 客户端模式 WebDAV 转发的服务器级设置（M12 §3.1）。 */
-export interface WebDavRelayConfig {
+/**
+ * 服务器级 WebDAV 设置（M12 §3.1 / M13）。
+ *
+ * 服务器模式下这些值存服务端库、所有设备一致，页面可直接改并立即生效；
+ * 环境变量只作首次默认值。口令绝不明文回传，只给 `webdavPasswordSet`。
+ */
+export interface WebDavConfig {
   /** 是否放行指向回环 / 内网 / 链路本地 / 云元数据的目标（默认关）。 */
   relayAllowPrivate: boolean;
+  webdavEnabled: boolean;
+  webdavUrl: string;
+  webdavUsername: string;
+  /** 服务器上是否已设置口令；绝不含口令明文。 */
+  webdavPasswordSet: boolean;
+  webdavIntervalMinutes: number;
+  webdavKeep: number;
+}
+
+/** 可提交的 WebDAV 设置补丁；口令缺省 / 空串 = 不改动。 */
+export interface WebDavConfigPatch {
+  relayAllowPrivate?: boolean;
+  webdavEnabled?: boolean;
+  webdavUrl?: string;
+  webdavUsername?: string;
+  webdavPassword?: string;
+  webdavIntervalMinutes?: number;
+  webdavKeep?: number;
 }
 
 /** 恢复结果（M9 §2.2）。 */
@@ -339,17 +362,30 @@ export async function updateSyncConfig(
   return request<SyncConfig>('PUT', '/api/sync/config', patch, deps);
 }
 
-/** 读取 WebDAV 转发的服务器级设置（当前仅「允许转发到内网地址」）。 */
-export async function fetchWebDavRelayConfig(deps: ApiDeps = {}): Promise<WebDavRelayConfig> {
-  return request<WebDavRelayConfig>('GET', '/api/webdav/config', undefined, deps);
+/** 读取服务器级 WebDAV 设置（含内网转发开关；不含口令明文）。 */
+export async function fetchWebDavConfig(deps: ApiDeps = {}): Promise<WebDavConfig> {
+  return request<WebDavConfig>('GET', '/api/webdav/config', undefined, deps);
+}
+
+/** 部分更新服务器级 WebDAV 设置；返回更新后的完整设置。 */
+export async function updateWebDavConfig(
+  patch: WebDavConfigPatch,
+  deps: ApiDeps = {},
+): Promise<WebDavConfig> {
+  return request<WebDavConfig>('PUT', '/api/webdav/config', patch, deps);
+}
+
+/** 读取服务器级设置（客户端模式仅用其中的「允许转发到内网地址」）。 */
+export async function fetchWebDavRelayConfig(deps: ApiDeps = {}): Promise<WebDavConfig> {
+  return fetchWebDavConfig(deps);
 }
 
 /** 更新「允许转发到内网地址」开关。 */
 export async function updateWebDavRelayConfig(
   relayAllowPrivate: boolean,
   deps: ApiDeps = {},
-): Promise<WebDavRelayConfig> {
-  return request<WebDavRelayConfig>('PUT', '/api/webdav/config', { relayAllowPrivate }, deps);
+): Promise<WebDavConfig> {
+  return updateWebDavConfig({ relayAllowPrivate }, deps);
 }
 
 /** 列出云端备份（时间倒序）。 */

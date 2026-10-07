@@ -2,18 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ApiError,
   deleteSyncFile,
-  fetchSyncConfig,
   fetchSyncFiles,
   fetchSyncStatus,
+  fetchWebDavConfig,
   fetchWebDavRelayConfig,
   restoreSyncFile,
   triggerSyncNow,
-  updateSyncConfig,
+  updateWebDavConfig,
   updateWebDavRelayConfig,
   uploadSyncNow,
   type RemoteBackupEntry,
-  type SyncConfig,
   type SyncStatus,
+  type WebDavConfig,
 } from '../lib/api';
 import {
   deleteCloudBackup,
@@ -34,6 +34,7 @@ import {
   restoreOverwriteConfirmMessage,
 } from '../lib/sync-view';
 import { useReminderStore, type StorageMode } from '../store/useReminderStore';
+import { PasswordField } from './PasswordField';
 import { ConfirmDialog, Toggle } from './ui';
 import styles from './WebDavSettings.module.css';
 
@@ -115,29 +116,49 @@ export function SyncStatusPanel({
 }
 
 /**
- * 服务器模式面板（M9）：自动同步开关 / 间隔 / 保留份数 / 状态 / 立即同步与备份 / 云端备份列表。
- * 凭据只由服务端环境变量持有，界面不出现地址与口令输入框。
+ * 服务器模式面板（M9 / M13）：WebDAV 地址 / 用户名 / 口令 / 自动同步开关 / 同步间隔 /
+ * 保留份数都可在页面上直接改并**立即生效**（存服务端库，所有设备一致；环境变量只作首次默认）。
+ * 口令绝不回显明文，只提示服务器上是否已设置。保留立即同步 / 立即备份 / 云端列表 / 恢复 / 删除。
  */
 function ServerWebDavPanel({ onNotice }: { onNotice: (message: string) => void }) {
   const refreshStore = useReminderStore((state) => state.refresh);
-  const [config, setConfig] = useState<SyncConfig | null>(null);
+  const [settings, setSettings] = useState<WebDavConfig | null>(null);
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [files, setFiles] = useState<RemoteBackupEntry[] | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savingConfig, setSavingConfig] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pendingRestore, setPendingRestore] = useState<RemoteBackupEntry | null>(null);
   const [pendingDelete, setPendingDelete] = useState<RemoteBackupEntry | null>(null);
 
+  // 可编辑表单（仅初次加载与保存后由服务端值回填，轮询不覆盖正在输入的内容）。
+  const [url, setUrl] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [intervalMinutes, setIntervalMinutes] = useState('10');
+  const [keep, setKeep] = useState('10');
+
+  const applySettings = useCallback((next: WebDavConfig) => {
+    setSettings(next);
+    setUrl(next.webdavUrl);
+    setUsername(next.webdavUsername);
+    setPassword('');
+    setEnabled(next.webdavEnabled);
+    setIntervalMinutes(String(next.webdavIntervalMinutes));
+    setKeep(String(next.webdavKeep));
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const [nextConfig, nextStatus, nextFiles] = await Promise.all([
-        fetchSyncConfig(),
+        fetchWebDavConfig(),
         fetchSyncStatus(),
         fetchSyncFiles(),
       ]);
-      setConfig(nextConfig);
+      applySettings(nextConfig);
       setStatus(nextStatus);
       setFiles(nextFiles);
       setError(null);
@@ -146,25 +167,47 @@ function ServerWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
     } finally {
       setLoaded(true);
     }
+  }, [applySettings]);
+
+  // 状态轮询只刷新展示，不改动上方表单。
+  const refreshStatus = useCallback(async () => {
+    try {
+      const [nextStatus, nextFiles] = await Promise.all([fetchSyncStatus(), fetchSyncFiles()]);
+      setStatus(nextStatus);
+      setFiles(nextFiles);
+    } catch {
+      // 轮询失败静默，保留上次结果。
+    }
   }, []);
 
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 15_000);
+    const timer = window.setInterval(() => void refreshStatus(), 15_000);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, refreshStatus]);
 
-  const saveConfig = async (patch: Partial<Pick<SyncConfig, 'enabled' | 'intervalMinutes' | 'keep'>>) => {
-    setSavingConfig(true);
+  const save = async () => {
+    if (settings === null) return;
+    setSaving(true);
     try {
-      const next = await updateSyncConfig(patch);
-      setConfig(next);
+      // 空口令 = 不改动（后端约定）；已设置时留空即保持原口令。
+      const next = await updateWebDavConfig({
+        webdavUrl: url.trim(),
+        webdavUsername: username,
+        webdavPassword: password,
+        webdavEnabled: enabled,
+        webdavIntervalMinutes: Number(intervalMinutes),
+        webdavKeep: Number(keep),
+      });
+      applySettings(next);
       setStatus(await fetchSyncStatus());
       setError(null);
+      onNotice('已保存 WebDAV 设置');
     } catch (caught) {
+      // 非法值由后端返回中文说明。
       onNotice(caught instanceof Error ? caught.message : '保存失败，请稍后重试');
     } finally {
-      setSavingConfig(false);
+      setSaving(false);
     }
   };
 
@@ -223,65 +266,103 @@ function ServerWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
     }
   };
 
-  const enabled = config?.enabled ?? status?.enabled ?? false;
-  const working = busy || savingConfig;
-  const keepRange = config?.options.keepRange ?? [1, 50];
-  const keepOptions = Array.from({ length: keepRange[1] - keepRange[0] + 1 }, (_, index) => keepRange[0] + index);
+  const working = busy || saving;
+  const formDisabled = !loaded || settings === null || saving;
+  const passwordPlaceholder = settings?.webdavPasswordSet ? '已设置，留空表示不修改' : '请输入口令';
 
   return (
     <>
       <p className={styles.groupNote}>这些设置在服务器上，所有设备一致；凭据保存在服务器，由服务器与 WebDAV 通信。</p>
+
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>服务器地址</span>
+        <input
+          className={styles.input}
+          type="url"
+          inputMode="url"
+          placeholder="https://dav.example.com/reminder/"
+          value={url}
+          disabled={formDisabled}
+          onChange={(event) => setUrl(event.target.value)}
+        />
+        <span className={styles.fieldHint}>完整地址，含协议与目录；保存后立即生效</span>
+      </label>
+
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>用户名</span>
+        <input
+          className={styles.input}
+          type="text"
+          autoComplete="username"
+          value={username}
+          disabled={formDisabled}
+          onChange={(event) => setUsername(event.target.value)}
+        />
+      </label>
+
+      <div className={styles.field}>
+        <PasswordField
+          label="口令"
+          value={password}
+          visible={showPassword}
+          disabled={formDisabled}
+          autoComplete="current-password"
+          placeholder={passwordPlaceholder}
+          onChange={setPassword}
+          onToggleVisible={() => setShowPassword((value) => !value)}
+        />
+        <span className={styles.fieldHint}>
+          {settings?.webdavPasswordSet === true
+            ? '服务器上已保存口令；留空表示不修改。'
+            : '服务器上尚未设置口令。'}
+        </span>
+      </div>
 
       <div className={styles.switchRow}>
         <div className={styles.rowText}>
           <p className={styles.rowTitle}>自动同步</p>
           <p className={styles.rowDesc}>在服务器上按间隔自动同步；关闭后仍可用下方按钮手动同步</p>
         </div>
-        <Toggle
-          checked={enabled}
-          label="自动同步"
-          disabled={!loaded || config === null || working}
-          onChange={(next) => config !== null && void saveConfig({ enabled: next })}
+        <Toggle checked={enabled} label="自动同步" disabled={formDisabled} onChange={setEnabled} />
+      </div>
+
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>同步间隔</span>
+        <input
+          className={styles.input}
+          type="number"
+          min={1}
+          max={1440}
+          value={intervalMinutes}
+          disabled={formDisabled}
+          onChange={(event) => setIntervalMinutes(event.target.value)}
         />
-      </div>
+        <span className={styles.fieldHint}>单位分钟，1–1440</span>
+      </label>
 
-      <div className={styles.field}>
-        <label className={styles.fieldLabel} htmlFor="sync-interval">
-          同步间隔
-        </label>
-        <select
-          id="sync-interval"
-          className={styles.select}
-          value={config?.intervalMinutes ?? 10}
-          disabled={!enabled || config === null || working}
-          onChange={(event) => void saveConfig({ intervalMinutes: Number(event.target.value) })}
-        >
-          {(config?.options.intervals ?? [5, 10, 30, 60]).map((minutes) => (
-            <option key={minutes} value={minutes}>
-              每 {minutes} 分钟
-            </option>
-          ))}
-        </select>
-      </div>
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>保留备份份数</span>
+        <input
+          className={styles.input}
+          type="number"
+          min={1}
+          max={1000}
+          value={keep}
+          disabled={formDisabled}
+          onChange={(event) => setKeep(event.target.value)}
+        />
+        <span className={styles.fieldHint}>1–1000 份；超出后自动清理本服务上传的旧备份</span>
+      </label>
 
-      <div className={styles.field}>
-        <label className={styles.fieldLabel} htmlFor="sync-keep">
-          保留备份份数
-        </label>
-        <select
-          id="sync-keep"
-          className={styles.select}
-          value={config?.keep ?? 10}
-          disabled={config === null || working}
-          onChange={(event) => void saveConfig({ keep: Number(event.target.value) })}
+      <div className={styles.buttonRow}>
+        <button
+          type="button"
+          className={styles.primaryButton}
+          disabled={formDisabled}
+          onClick={() => void save()}
         >
-          {keepOptions.map((count) => (
-            <option key={count} value={count}>
-              {count} 份
-            </option>
-          ))}
-        </select>
-        <span className={styles.fieldHint}>超出后自动清理本服务上传的旧备份</span>
+          {saving ? '保存中…' : '保存设置'}
+        </button>
       </div>
 
       <SyncStatusPanel loaded={loaded} error={error} enabled={enabled} status={status} />

@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:server": "node --test server/test/*.test.ts",
+    "typecheck": "tsc -b && tsc --noEmit -p server/tsconfig.json",
     "typecheck:server": "tsc --noEmit -p server/tsconfig.json"
   },
   "dependencies": {
