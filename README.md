@@ -33,7 +33,7 @@
 | 液态玻璃 / 光栅玻璃 / 折射参数 | 不实现视觉效果，但**备份字段原样保留** |
 | 后台精确唤醒提醒 | 页面打开时用 Notification API；另提供 Service Worker 周期检查（能力受限时明确提示） |
 | 本地数据库 | 可选后端（Node.js + SQLite）为**唯一真数据源**；前端 IndexedDB 降级为只读离线缓存（M7 起后端与 WebDAV 互通）。未部署后端时回落本地模式，界面上会明确标注 |
-| WebDAV 云备份 | **服务端与 WebDAV 双向同步**（安卓端仍走 WebDAV 备份包，两边数据互通）。凭据只存服务端环境变量，前端只显示只读状态与「立即同步」 |
+| WebDAV 云备份 | **服务端与 WebDAV 双向同步**（安卓端仍走 WebDAV 备份包，两边数据互通）。凭据只存服务端环境变量；设置页可改自动同步开关/间隔/保留份数、立即同步/备份、恢复与删除云端备份 |
 
 ## 技术栈
 
@@ -98,13 +98,13 @@ Service Worker 与 manifest 在构建时自动生成。若启用内置后端，�
 | `SERVE_STATIC` | `1` | 是否由后端服务 `dist/`（纯 API 部署可关） |
 | `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
 | `VITE_API_BASE` | 空 | 前端构建期的后端地址前缀；空 = 同源 `/api` |
-| `WEBDAV_ENABLED` | `0` | 是否启用 WebDAV 双向同步；关闭时 `/api/sync/status` 返回 `{enabled:false}` |
+| `WEBDAV_ENABLED` | `0` | 自动同步开关的**初始默认值**（首次读取时落库，之后在设置页调整，所有设备一致） |
 | `WEBDAV_URL` | 空 | WebDAV 目录地址（结尾斜杠自动补齐）。启用但留空会拒绝启动 |
 | `WEBDAV_USERNAME` / `WEBDAV_PASSWORD` | 空 | Basic 凭据；只从环境变量读取，绝不返回前端、绝不写日志 |
-| `WEBDAV_INTERVAL_MINUTES` | `10` | 定时轮询远端间隔（分钟，下限 1） |
+| `WEBDAV_INTERVAL_MINUTES` | `10` | 同步间隔的**初始默认值**（分钟）；设置页只允许 `5 / 10 / 30 / 60` |
 | `WEBDAV_DEBOUNCE_SECONDS` | `60` | 本机数据变动后的延迟上传（合并节流） |
 | `WEBDAV_ENCRYPT` | `1` | 上传的包是否加密（与安卓端「备份数据加密」一致） |
-| `WEBDAV_KEEP` | `10` | 仅保留最近 N 份**由本服务上传**的备份 |
+| `WEBDAV_KEEP` | `10` | 保留份数的**初始默认值**（设置页范围 `1..50`），只清理本服务上传的备份 |
 | `WEBDAV_TIMEOUT_SECONDS` | `20` | 单次 HTTP 请求超时（秒） |
 
 `WEBDAV_*` 详见下文「WebDAV 双向同步（与安卓版共用同一目录）」。
@@ -175,16 +175,21 @@ server {
 
 后端可直接与 WebDAV 服务器双向同步，备份包格式与安卓版完全一致，**同一个目录可同时被安卓版与本服务使用**：
 
-- 开启：`.env` 设置 `WEBDAV_ENABLED=1` 与 `WEBDAV_URL`（如 `https://dav.example.com/reminder/`），
-  以及 `WEBDAV_USERNAME` / `WEBDAV_PASSWORD`。凭据只存在于服务端环境变量，不返回前端、不写日志。
-- 每个周期（`WEBDAV_INTERVAL_MINUTES`）：`PROPFIND` 取最新备份（与上次已处理的比对 etag / 修改时间，
+- 开启：`.env` 设置 `WEBDAV_URL`（如 `https://dav.example.com/reminder/`）与
+  `WEBDAV_USERNAME` / `WEBDAV_PASSWORD`。凭据只存在于服务端环境变量，不返回前端、不写日志。
+  `WEBDAV_ENABLED` / `WEBDAV_INTERVAL_MINUTES` / `WEBDAV_KEEP` 只是**初始默认值**，
+  首次读取时落库，之后在设置页「WebDAV 云备份」里改，改动立即生效、重启保持、所有设备一致。
+- 每个周期：`PROPFIND` 取最新备份（与上次已处理的比对 etag / 修改时间，
   未变则跳过下载）→ 下载 → 解密解包 → 与库内数据逐条合并（`updatedAt` + 墓碑）→ 有变化才落库并 revision++ → 上传一份新包。
 - 本机数据变更后按 `WEBDAV_DEBOUNCE_SECONDS` 合并节流上传，避免每次变动都写远端；同步任务在进程内串行。
 - 加密开关 `WEBDAV_ENCRYPT`：`1` 时用上游 AES-256-CBC 口径加密（与安卓端「备份数据加密」互通，两种都能读）。
-- 保留与清理 `WEBDAV_KEEP`：只清理**由本服务上传**的旧包，绝不删除安卓端写入的历史备份。
-- 状态与手动触发：设置页「WebDAV 云备份」为只读状态 + 「立即同步」；
-  接口 `GET /api/sync/status`、`POST /api/sync/now`（同一时刻重复调用返回 409）。
-  状态响应只含是否启用、地址、上次同步/上传时间、上次结果与远端本应用备份列表，**不含凭据**。
+- 保留与清理（设置页可改）：只清理**由本服务上传**的旧包，绝不删除安卓端写入的历史备份。
+- 云端备份管理：设置页可查看、恢复、删除备份。恢复复用与自动同步完全相同的合并纯函数，
+  **只读不删远端**、重复恢复幂等；别人的备份不可删除（按钮置灰并说明原因）。
+  手动「立即同步 / 立即备份 / 恢复 / 删除」不受自动同步开关限制。
+- 接口：`GET/PUT /api/sync/config`、`GET /api/sync/status`、`POST /api/sync/now`、`POST /api/sync/upload`、
+  `GET /api/sync/files`、`POST /api/sync/restore`、`DELETE /api/sync/files/:name`。
+  状态响应含 `nextSyncAt` / `lastMerged` / `lastAction`，**不含凭据**。
 - 失败不致命：任何异常都只记录脱敏日志与状态、下个周期继续；连续失败按指数退避（上限 4× 轮询间隔）。
 
 ## 备份格式（与安卓互通）
@@ -199,8 +204,9 @@ server {
 
 ### WebDAV 云备份（可选）
 
-云备份现已由**服务端**接管：在 `.env` 配置 `WEBDAV_*`（见上文「WebDAV 双向同步」），
-浏览器不再保存服务器地址与凭据；设置页只显示同步状态、远端备份列表与「立即同步」。
+云备份现已由**服务端**接管：在 `.env` 配置 `WEBDAV_URL` 与凭据（见上文「WebDAV 双向同步」），
+自动同步开关 / 间隔 / 保留份数存在服务器上，设置页「WebDAV 云备份」可直接调整，所有设备一致。
+浏览器不再保存服务器地址与凭据；该分组还可查看、恢复、删除云端备份，并显示下次自动同步与待上传状态。
 旧的浏览器内凭据会在读取时自动清除，并提示已迁移到服务器端配置。
 「导出为文件 / 从文件恢复」仍为本地手动路径，与云端互不影响。
 
