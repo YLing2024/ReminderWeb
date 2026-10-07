@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AppLockGate } from './components/AppLockGate';
 import { ThemeController } from './components/ThemeController';
 import HomePage from './pages/HomePage';
 import { useReminderStore } from './store/useReminderStore';
@@ -23,18 +24,20 @@ export default function App() {
   return (
     <Suspense fallback={<div style={{ padding: 24, textAlign: 'center' }}>正在载入…</div>}>
       <ThemeController />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/reminder/new" element={<EditPage />} />
-        <Route path="/reminder/:id/edit" element={<EditPage />} />
-        <Route path="/reminder/:id" element={<DetailPage />} />
-        <Route path="/search" element={<SearchPage />} />
-        <Route path="/tags" element={<TagPage />} />
-        <Route path="/calculator" element={<DateCalculatorPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AppLockGate>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/reminder/new" element={<EditPage />} />
+          <Route path="/reminder/:id/edit" element={<EditPage />} />
+          <Route path="/reminder/:id" element={<DetailPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/tags" element={<TagPage />} />
+          <Route path="/calculator" element={<DateCalculatorPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppLockGate>
     </Suspense>
   );
 }
