@@ -24,6 +24,9 @@ interface ReminderStore {
   togglePin: (id: number) => Promise<void>;
   findTag: (name: string) => TagItem | undefined;
   addTag: (name: string, color?: string) => Promise<TagItem | undefined>;
+  updateTag: (id: number, name: string, color: string) => Promise<void>;
+  deleteTag: (id: number) => Promise<void>;
+  moveTag: (id: number, direction: 'up' | 'down') => Promise<void>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
 }
 
@@ -92,6 +95,51 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
       set({ tags: [...tags, created] });
       await persist();
       return created;
+    },
+
+    updateTag: async (id, name, color) => {
+      const trimmed = name.trim();
+      if (trimmed === '') return;
+      const current = get().tags.find((tag) => tag.id === id);
+      if (current === undefined) return;
+      const oldKey = current.name.trim().toLowerCase();
+      const tags = get()
+        .tags.map((tag) => (tag.id === id ? { ...tag, name: trimmed, color } : tag))
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      // 改名时同步事件里的标签名，避免出现指向已不存在标签的悬空引用。
+      const reminders = get().reminders.map((item) =>
+        item.tag.trim().toLowerCase() === oldKey ? { ...item, tag: trimmed } : item,
+      );
+      set({ tags, reminders });
+      await persist();
+    },
+
+    deleteTag: async (id) => {
+      const current = get().tags.find((tag) => tag.id === id);
+      if (current === undefined) return;
+      const key = current.name.trim().toLowerCase();
+      set({
+        tags: get().tags.filter((tag) => tag.id !== id),
+        reminders: get().reminders.map((item) =>
+          item.tag.trim().toLowerCase() === key ? { ...item, tag: '' } : item,
+        ),
+      });
+      await persist();
+    },
+
+    moveTag: async (id, direction) => {
+      const ordered = [...get().tags].sort((a, b) => a.sortOrder - b.sortOrder);
+      const index = ordered.findIndex((tag) => tag.id === id);
+      if (index < 0) return;
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= ordered.length) return;
+      const reordered = [...ordered];
+      const [moved] = reordered.splice(index, 1);
+      if (moved === undefined) return;
+      reordered.splice(target, 0, moved);
+      const tags = reordered.map((tag, position) => ({ ...tag, sortOrder: position + 1 }));
+      set({ tags });
+      await persist();
     },
 
     updateSettings: async (partial) => {
