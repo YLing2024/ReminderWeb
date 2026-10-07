@@ -15,6 +15,14 @@ declare const self: ServiceWorkerGlobalScope & {
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
+// 新版本立即接管：否则新 SW 要等到所有标签页都关闭才激活，用户会一直拿到旧构建的预缓存。
+self.addEventListener('install', () => {
+  void self.skipWaiting();
+});
+self.addEventListener('activate', (event: ExtendableEvent) => {
+  event.waitUntil(self.clients.claim());
+});
+
 interface ShowNotificationMessage {
   type: 'SHOW_NOTIFICATION';
   title: string;
