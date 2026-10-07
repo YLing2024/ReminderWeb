@@ -108,14 +108,14 @@ describe('reminderDisplayInfo 展示口径', () => {
     expect(info.dayCount).toBe(1);
   });
 
-  it('农历口径底部日期带为农历短格式', () => {
+  it('农历口径底部日期带为农历短格式 + 星期', () => {
     const info = reminderDisplayInfo(
       makeItem({ title: '农历事件', date: '2026-08-31', isLunar: true }),
       ld(2026, 8, 1),
       true,
       true,
     );
-    expect(info.referenceText).toBe('二〇二六年七月十九');
+    expect(info.referenceText).toBe('二〇二六年七月十九 星期一');
   });
 });
 

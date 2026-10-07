@@ -10,6 +10,13 @@ const TYPE_COLOR: Record<ReminderType, string> = {
   BIRTHDAY: 'var(--type-birthday)',
 };
 
+/** 把底带文案拆成「日期前缀」与「星期X」，保证缩窄时丢的是前缀而不是星期。 */
+function splitReference(text: string): { prefix: string; weekday: string } {
+  const match = /^(.*?)\s*(星期[日一二三四五六])$/.exec(text);
+  if (match === null) return { prefix: text, weekday: '' };
+  return { prefix: match[1] ?? text, weekday: match[2] ?? '' };
+}
+
 function resolveBandColor(item: ReminderItem, tagColor: string | null): string {
   if (item.isCustomized && item.customHeaderColor.trim() !== '') {
     return item.customHeaderColor;
@@ -33,7 +40,8 @@ export function ReminderCard({
   onOpen: () => void;
   onRequestMenu?: (point: { x: number; y: number } | null) => void;
 }) {
-  const info = reminderDisplayInfo(item, today);
+  const info = reminderDisplayInfo(item, today, item.isLunar, true);
+  const reference = splitReference(info.referenceText);
   const pressTimer = useRef<number | null>(null);
   const longPressed = useRef(false);
   const startPoint = useRef<{ x: number; y: number } | null>(null);
@@ -93,7 +101,10 @@ export function ReminderCard({
         <span className={styles.unit}>天</span>
       </div>
       <div className={styles.footer}>
-        <span className={styles.footerText}>{info.referenceText}</span>
+        <span className={styles.footerText}>
+          <span className={styles.footerPrefix}>{reference.prefix}</span>
+          {reference.weekday !== '' && <span className={styles.footerWeekday}>{reference.weekday}</span>}
+        </span>
       </div>
     </button>
   );

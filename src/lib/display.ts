@@ -4,7 +4,7 @@
  */
 import type { ReminderItem } from '../types/reminder';
 import { calculateNextTargetDate, formatLunarDate, formatLunarDateShort, resolveIntervalStage } from './calendar';
-import { daysBetween, formatGregorianDate, parseLocalDate, type LocalDate } from './local-date';
+import { daysBetween, formatGregorianDate, parseLocalDate, weekdayChinese, type LocalDate } from './local-date';
 
 export interface ReminderDisplayInfo {
   /** 顶部色带文字：`title + 空格 + suffix`（如「事件 生日就是」）。 */
@@ -20,7 +20,10 @@ export interface ReminderDisplayInfo {
 
 function formatReferenceDate(date: LocalDate, useLunar: boolean, shortFormat: boolean): string {
   if (useLunar) {
-    return shortFormat ? formatLunarDateShort(date) : formatLunarDate(date);
+    // 长格式（formatLunarDate）本身已含「星期X」；短格式（formatLunarDateShort）只到「月日」，
+    // 按修正单要求补上「星期X」，保证底带信息完整。
+    const base = shortFormat ? formatLunarDateShort(date) : formatLunarDate(date);
+    return base.includes('星期') ? base : `${base} 星期${weekdayChinese(date)}`;
   }
   return formatGregorianDate(date);
 }
