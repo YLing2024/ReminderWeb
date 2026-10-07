@@ -12,3 +12,6 @@ server/data/
 *.db-wal
 *.db-shm
 .env
+
+# 需求文档只留在本地，不进仓库（规则：开源项目的需求文档不上传 GitHub）
+REQUIREMENTS*.md
