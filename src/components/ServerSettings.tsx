@@ -28,6 +28,7 @@ export function ServerSettings({ onNotice }: { onNotice: (message: string) => vo
   const serverUser = useReminderStore((state) => state.serverUser);
   const serverVersion = useReminderStore((state) => state.serverVersion);
   const revision = useReminderStore((state) => state.revision);
+  const serverReachable = useReminderStore((state) => state.serverReachable);
   const syncing = useReminderStore((state) => state.syncing);
   const syncError = useReminderStore((state) => state.syncError);
   const canUploadLocal = useReminderStore((state) => state.canUploadLocal);
@@ -36,8 +37,6 @@ export function ServerSettings({ onNotice }: { onNotice: (message: string) => vo
   const logout = useReminderStore((state) => state.logout);
   const refresh = useReminderStore((state) => state.refresh);
   const [busy, setBusy] = useState(false);
-
-  const serverReachable = authMode !== null || revision !== null;
 
   const runSync = async () => {
     setBusy(true);

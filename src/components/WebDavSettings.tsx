@@ -22,6 +22,14 @@ import {
 } from '../lib/cloud-backup';
 import { testConnection, type WebDavFile } from '../lib/webdav';
 import {
+  parseTransportPreference,
+  resolveWebDavTransport,
+  transportExplanation,
+  transportPreferenceLabel,
+  WEBDAV_TRANSPORT_PREFERENCES,
+  type WebDavTransportPreference,
+} from '../lib/webdav-transport';
+import {
   actionLabel,
   appliedTotal,
   deleteConfirmMessage,
@@ -347,6 +355,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
   const reminders = useReminderStore((state) => state.reminders);
   const tags = useReminderStore((state) => state.tags);
   const importData = useReminderStore((state) => state.importData);
+  const serverReachable = useReminderStore((state) => state.serverReachable);
 
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState<'test' | 'upload' | 'list' | 'restore' | 'delete' | null>(null);
@@ -356,6 +365,9 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
 
   const disabled = !settings.webdavEnabled;
   const working = busy !== null;
+  const preference = parseTransportPreference(settings.webdavTransport);
+  const transport = resolveWebDavTransport(preference, serverReachable);
+  const deps = { transport };
 
   const ensureConfigured = (): boolean => {
     if (settings.webdavServer.trim() === '') {
@@ -371,9 +383,9 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
     if (!ensureConfigured()) return;
     setBusy('test');
     try {
-      await testConnection(webDavConfigFrom(settings));
+      await testConnection(webDavConfigFrom(settings), deps);
       await updateSettings({ webdavLastResult: '连接正常' });
-      onNotice('连接正常');
+      onNotice(`连接正常（${transportExplanation(transport)}）`);
     } catch (error) {
       const message = errorMessage(error);
       await updateSettings({ webdavLastResult: `连接失败：${message}` });
@@ -387,7 +399,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
     if (!ensureConfigured()) return;
     setBusy('upload');
     try {
-      const outcome = await uploadCurrentBackup({ reminders, tags, settings });
+      const outcome = await uploadCurrentBackup({ reminders, tags, settings }, deps);
       const suffix = outcome.pruned > 0 ? `，已清理 ${outcome.pruned} 份旧备份` : '';
       await updateSettings({
         webdavLastSuccessAt: Date.now(),
@@ -407,7 +419,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
     if (!ensureConfigured()) return;
     setBusy('list');
     try {
-      const next = await listCloudBackups(settings);
+      const next = await listCloudBackups(settings, deps);
       setFiles(next);
       if (next.length === 0) onNotice('云端还没有备份');
     } catch (error) {
@@ -420,7 +432,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
   const confirmRestore = async (file: WebDavFile) => {
     setBusy('restore');
     try {
-      const result = await restoreCloudBackup(settings, file.name);
+      const result = await restoreCloudBackup(settings, file.name, deps);
       await importData({ reminders: result.reminders, tags: result.tags, settings: result.settings });
       onNotice(`已恢复 ${result.reminders.length} 条提醒、${result.tags.length} 个标签、${result.imageCount} 张图片。`);
     } catch (error) {
@@ -433,7 +445,7 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
   const confirmDelete = async (file: WebDavFile) => {
     setBusy('delete');
     try {
-      await deleteCloudBackup(settings, file.name);
+      await deleteCloudBackup(settings, file.name, deps);
       setFiles((current) => (current === null ? current : current.filter((entry) => entry.name !== file.name)));
       onNotice('已删除该云端备份');
     } catch (error) {
@@ -457,6 +469,31 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
           label="启用云备份"
           onChange={(next) => void updateSettings({ webdavEnabled: next })}
         />
+      </div>
+
+      <div className={styles.field}>
+        <label className={styles.fieldLabel} htmlFor="webdav-transport">
+          WebDAV 连接方式
+        </label>
+        <select
+          id="webdav-transport"
+          className={styles.select}
+          value={preference}
+          disabled={disabled}
+          onChange={(event) =>
+            void updateSettings({ webdavTransport: event.target.value as WebDavTransportPreference })
+          }
+        >
+          {WEBDAV_TRANSPORT_PREFERENCES.map((value) => (
+            <option key={value} value={value}>
+              {transportPreferenceLabel(value)}
+            </option>
+          ))}
+        </select>
+        <span className={styles.fieldHint}>
+          当前实际使用：{transportExplanation(transport)}
+          {preference === 'auto' && !serverReachable ? '（未检测到后端服务）' : ''}
+        </span>
       </div>
 
       <label className={styles.field}>

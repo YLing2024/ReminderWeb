@@ -56,6 +56,19 @@ export interface ServerSnapshot {
   tags: SyncTag[];
   settings: SyncSettings;
   tombstones: SyncTombstone[];
+  /** 服务端持有的卡片背景图文件名（不含字节）。 */
+  imageNames: string[];
+}
+
+/** 图片条目（base64 传输，仅整库读取 / 替换用）。 */
+export interface WireImage {
+  name: string;
+  data: string;
+}
+
+/** `GET /api/data/full`：快照 + 卡片背景图字节。 */
+export interface FullSnapshot extends ServerSnapshot {
+  images: WireImage[];
 }
 
 export interface HealthInfo {
@@ -138,6 +151,21 @@ export interface PushResult extends ServerSnapshot {
   serverRevisionBefore: number;
   baseRevision: number;
   rejected: number;
+}
+
+/** 整库替换（`PUT /api/data/replace`）请求体（M11 §2）。 */
+export interface ReplacePayload {
+  reminders: SyncReminder[];
+  tags: SyncTag[];
+  settings: SyncSettings;
+  images: WireImage[];
+}
+
+/** 整库替换返回：服务端写入后的完整快照与计数。 */
+export interface ReplaceResult extends ServerSnapshot {
+  serverRevisionBefore: number;
+  rejected: number;
+  counts: { reminders: number; tags: number; images: number };
 }
 
 export type ApiErrorCode =
@@ -326,6 +354,72 @@ export async function deleteSyncFile(name: string, deps: ApiDeps = {}): Promise<
 
 export async function pushData(payload: PushPayload, deps: ApiDeps = {}): Promise<PushResult> {
   return request<PushResult>('PUT', '/api/data', payload, deps);
+}
+
+/** 读取快照 + 卡片背景图字节（迁移 / 服务器模式水合用）。 */
+export async function fetchFullData(deps: ApiDeps = {}): Promise<FullSnapshot> {
+  return request<FullSnapshot>('GET', '/api/data/full', undefined, deps);
+}
+
+/** 整库替换（仅迁移用）：用请求体覆盖服务端全部数据。 */
+export async function replaceData(payload: ReplacePayload, deps: ApiDeps = {}): Promise<ReplaceResult> {
+  return request<ReplaceResult>('PUT', '/api/data/replace', payload, deps);
+}
+
+/** 原始字节请求（图片上传）。 */
+async function requestRaw(
+  method: string,
+  path: string,
+  body: Uint8Array,
+  contentType: string,
+  deps: ApiDeps,
+): Promise<void> {
+  const fetchImpl = deps.fetchImpl ?? (globalThis.fetch as typeof fetch | undefined);
+  if (typeof fetchImpl !== 'function') throw new ApiError('NETWORK', '当前环境不支持网络请求');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? API_TIMEOUT_MS);
+  const base = deps.base ?? apiBase();
+  try {
+    const response = await fetchImpl(`${base}${path}`, {
+      method,
+      credentials: requestCredentials(base),
+      headers: { 'Content-Type': contentType },
+      body: body as unknown as BodyInit,
+      signal: controller.signal,
+    });
+    if (!response.ok) throw await errorFromResponse(response);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw mapFetchError(error);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 上传单张卡片背景图字节（服务器模式水合 / 迁移用）。 */
+export async function uploadImage(name: string, bytes: Uint8Array, deps: ApiDeps = {}): Promise<void> {
+  await requestRaw('PUT', `/api/images/${encodeURIComponent(name)}`, bytes, 'application/octet-stream', deps);
+}
+
+/** 读取单张卡片背景图字节；不存在返回 null。 */
+export async function fetchImage(name: string, deps: ApiDeps = {}): Promise<Uint8Array | null> {
+  const fetchImpl = deps.fetchImpl ?? (globalThis.fetch as typeof fetch | undefined);
+  if (typeof fetchImpl !== 'function') return null;
+  const base = deps.base ?? apiBase();
+  try {
+    const response = await fetchImpl(`${base}/api/images/${encodeURIComponent(name)}`, {
+      credentials: requestCredentials(base),
+    });
+    if (!response.ok) return null;
+    return new Uint8Array(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+/** 删除单张卡片背景图。 */
+export async function deleteImage(name: string, deps: ApiDeps = {}): Promise<void> {
+  await request<unknown>('DELETE', `/api/images/${encodeURIComponent(name)}`, undefined, deps);
 }
 
 /** SSO 模式登录跳转地址（沿用仓库既有网关约定）。 */

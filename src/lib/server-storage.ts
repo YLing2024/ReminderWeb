@@ -11,6 +11,7 @@ import { createStore, del, get, set } from 'idb-keyval';
 import type { ReminderItem, TagItem } from '../types/reminder';
 import { normalizeReminderList, normalizeTagList } from './normalize';
 import type { ServerSnapshot, SyncReminder, SyncSettings, SyncTag, SyncTombstone } from './api';
+import type { FullSnapshot, WireImage } from './api';
 import { DEFAULT_SETTINGS, type AppSettings } from './storage';
 
 export const SERVER_CACHE_KEY = 'reminderweb:cache';
@@ -29,6 +30,7 @@ export const LOCAL_ONLY_SETTING_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   'appLockEnabled',
   'appLockPasswordHash',
   'webdavEnabled',
+  'webdavTransport',
   'webdavServer',
   'webdavUsername',
   'webdavPassword',
@@ -112,7 +114,35 @@ export function normalizeSnapshot(raw: unknown): ServerSnapshot {
     tags,
     settings: normalizeSettings(record.settings),
     tombstones: normalizeTombstones(record.tombstones),
+    imageNames: normalizeImageNames(record.imageNames),
   };
+}
+
+/** 归一化图片名列表。 */
+export function normalizeImageNames(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string' && entry !== '') out.push(entry);
+  }
+  return out;
+}
+
+/** 归一化迁移用全量快照（快照 + base64 图片）。 */
+export function normalizeFullSnapshot(raw: unknown): FullSnapshot {
+  const snapshot = normalizeSnapshot(raw);
+  const record = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
+  const images: WireImage[] = [];
+  if (Array.isArray(record.images)) {
+    for (const entry of record.images) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      const item = entry as Record<string, unknown>;
+      if (typeof item.name === 'string' && item.name !== '' && typeof item.data === 'string') {
+        images.push({ name: item.name, data: item.data });
+      }
+    }
+  }
+  return { ...snapshot, images };
 }
 
 export async function loadServerCache(): Promise<ServerSnapshot | null> {

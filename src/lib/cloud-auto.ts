@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { useReminderStore } from '../store/useReminderStore';
 import { uploadCurrentBackup } from './cloud-backup';
 import { AUTO_BACKUP_DELAY_MS, createThrottledRunner } from './webdav';
+import { parseTransportPreference, resolveWebDavTransport } from './webdav-transport';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '自动备份失败';
@@ -23,12 +24,19 @@ export function useCloudAutoBackup(): void {
 
     const runner = createThrottledRunner(async () => {
       const state = useReminderStore.getState();
+      const transport = resolveWebDavTransport(
+        parseTransportPreference(state.settings.webdavTransport),
+        state.serverReachable,
+      );
       try {
-        const outcome = await uploadCurrentBackup({
-          reminders: state.reminders,
-          tags: state.tags,
-          settings: state.settings,
-        });
+        const outcome = await uploadCurrentBackup(
+          {
+            reminders: state.reminders,
+            tags: state.tags,
+            settings: state.settings,
+          },
+          { transport },
+        );
         await useReminderStore.getState().updateSettings({
           webdavLastSuccessAt: Date.now(),
           webdavLastResult: `自动备份成功：${outcome.fileName}`,

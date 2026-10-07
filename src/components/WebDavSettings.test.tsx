@@ -112,6 +112,8 @@ describe('WebDavSettings 两模式分组显隐', () => {
     expect(html).toContain('自动同步');
     expect(html).not.toContain('placeholder="https://dav.example.com/dav/"');
     expect(html).not.toContain('测试连接');
+    // 服务器模式不显示连接方式选项（M11 §3.3）。
+    expect(html).not.toContain('WebDAV 连接方式');
   });
 
   it('客户端模式：显示 WebDAV 直连输入框与浏览器直连操作', () => {
@@ -124,6 +126,18 @@ describe('WebDavSettings 两模式分组显隐', () => {
     expect(html).toContain('自动备份');
     expect(html).toContain('保留份数');
     expect(html).not.toContain('立即同步');
+  });
+
+  it('客户端模式：连接方式提供自动/同源代理/直连并说明当前实际方式', () => {
+    const html = renderToString(createElement(WebDavSettings, { onNotice: () => {}, mode: 'client' }));
+    expect(html).toContain('WebDAV 连接方式');
+    expect(html).toContain('自动（推荐）');
+    expect(html).toContain('同源代理');
+    expect(html).toContain('直连');
+    // 默认 serverReachable=false → 实际走直连，并提示未检测到后端。
+    expect(html).toContain('当前实际使用：');
+    expect(html).toContain('浏览器直连');
+    expect(html).toContain('未检测到后端服务');
   });
 
   it('检测中：显示检测提示', () => {

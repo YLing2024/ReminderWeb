@@ -13,32 +13,52 @@ import type { ReminderItem, TagItem } from '../types/reminder';
 import {
   DEFAULT_SETTINGS,
   clearAllData,
+  listImageNames,
+  loadImageBlob,
   loadPersistedData,
+  replaceImageBlobs,
   savePersistedData,
   type AppSettings,
 } from '../lib/storage';
 import {
   fetchData,
+  fetchFullData,
   fetchVersion,
   isUnauthorized,
   login as apiLogin,
   logout as apiLogout,
   probeHealth,
   pushData,
+  replaceData,
   ssoLoginUrl,
+  uploadImage,
   type AuthMode,
   type PushPayload,
+  type ReplacePayload,
   type ServerSnapshot,
   type SyncReminder,
   type SyncSettings,
   type SyncTag,
   type SyncTombstone,
 } from '../lib/api';
-import { detectAppMode } from '../lib/app-mode';
+import { detectAppMode, writeStoredAppMode } from '../lib/app-mode';
+import { base64ToBytes, bytesToBase64 } from '../lib/base64';
+import {
+  countsOf,
+  toLocalReminders,
+  toLocalTags,
+  toServerReminders,
+  toServerTags,
+  verifyMigration,
+  type MigrationCounts,
+  type MigrationDirection,
+  type MigrationVerification,
+} from '../lib/mode-migration';
 import {
   LOCAL_ONLY_SETTING_KEYS,
   loadServerCache,
   mergeServerSettings,
+  normalizeFullSnapshot,
   normalizeSnapshot,
   saveServerCache,
   syncedSettings,
@@ -56,6 +76,15 @@ export interface ServerInfo {
   authMode: AuthMode | null;
 }
 
+/** 模式切换迁移结果（M11 §2）。 */
+export interface MigrationOutcome {
+  direction: MigrationDirection;
+  counts: MigrationCounts;
+  elapsedMs: number;
+  revision?: number;
+  verification: MigrationVerification;
+}
+
 interface ReminderStore {
   reminders: ReminderItem[];
   tags: TagItem[];
@@ -67,6 +96,10 @@ interface ReminderStore {
   serverUser: string | null;
   revision: number | null;
   serverVersion: string | null;
+  /** 后端是否可达（用于设置页置灰服务器模式入口 / 自动选择 WebDAV 连接方式）。 */
+  serverReachable: boolean;
+  /** 服务端当前持有的卡片背景图文件名。 */
+  serverImageNames: string[];
   syncing: boolean;
   /** 有尚未成功推送到服务器的本机改动。 */
   dirty: boolean;
@@ -90,6 +123,10 @@ interface ReminderStore {
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   uploadLocalData: () => Promise<void>;
+  /** 服务器 → 客户端：后端全量覆盖本地后切到客户端模式（M11 §2）。 */
+  migrateToClient: () => Promise<MigrationOutcome>;
+  /** 客户端 → 服务器：本机全量覆盖后端后切到服务器模式（M11 §2）。 */
+  migrateToServer: () => Promise<MigrationOutcome>;
 
   addReminder: (item: ReminderItem) => Promise<number>;
   updateReminder: (item: ReminderItem) => Promise<void>;
@@ -123,6 +160,27 @@ function toSyncTag(item: TagItem): SyncTag {
   return { ...item, updatedAt };
 }
 
+function reminderSampleKey(item: ReminderItem): string {
+  return `${item.id}|${item.title}|${item.date}`;
+}
+
+function tagSampleKey(tag: TagItem | undefined): string {
+  return tag === undefined ? '' : tag.name;
+}
+
+/** 抽样比对：数量 + 首条（按 id 排序）提醒的 id/title/date + 首个标签名。 */
+function samplesMatch(a: ReminderItem[], b: ReminderItem[], ta: TagItem[], tb: TagItem[]): boolean {
+  const ar = [...a].sort((x, y) => x.id - y.id);
+  const br = [...b].sort((x, y) => x.id - y.id);
+  if (ar.length !== br.length) return false;
+  if (ar.length > 0 && br.length > 0 && reminderSampleKey(ar[0]!) !== reminderSampleKey(br[0]!)) return false;
+  const at = [...ta].sort((x, y) => x.id - y.id);
+  const bt = [...tb].sort((x, y) => x.id - y.id);
+  if (at.length !== bt.length) return false;
+  if (at.length > 0 && bt.length > 0 && tagSampleKey(at[0]) !== tagSampleKey(bt[0])) return false;
+  return true;
+}
+
 function isLocalMode(mode: StorageMode): boolean {
   return mode !== 'server';
 }
@@ -153,12 +211,27 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
       revision: snapshot.revision,
       settingsUpdatedAt: snapshot.settings.updatedAt,
       tombstones: snapshot.tombstones,
+      serverImageNames: snapshot.imageNames,
+      serverReachable: true,
       dirty: false,
       syncError: null,
       ...extra,
     });
     void saveServerCache(snapshot);
     localSnapshot();
+  }
+
+  /** 把本机引用的图片里服务端还没有的那部分上传（只增不删，避免误删他设备图片）。 */
+  async function syncImagesToServer(): Promise<void> {
+    const serverNames = new Set(get().serverImageNames);
+    const localNames = await listImageNames();
+    const missing = localNames.filter((name) => !serverNames.has(name));
+    for (const name of missing) {
+      const blob = await loadImageBlob(name);
+      if (blob === undefined) continue;
+      await uploadImage(name, new Uint8Array(await blob.arrayBuffer()));
+    }
+    if (missing.length > 0) set({ serverImageNames: [...new Set([...serverNames, ...missing])] });
   }
 
   function buildPayload(): PushPayload {
@@ -179,6 +252,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
       const result = await pushData(buildPayload());
       const snapshot = normalizeSnapshot(result);
       adoptSnapshot(snapshot, { canUploadLocal: false });
+      await syncImagesToServer();
     } catch (error) {
       if (isUnauthorized(error)) {
         set({ dirty: true, syncError: '登录状态已过期' });
@@ -236,6 +310,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
     serverUser: null,
     revision: null,
     serverVersion: null,
+    serverReachable: false,
+    serverImageNames: [],
     syncing: false,
     dirty: false,
     syncError: null,
@@ -258,8 +334,16 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
 
       const detection = await detectAppMode();
       if (detection.mode === 'client') {
-        // 纯前端：数据存 IndexedDB，不发任何 /api 请求。
+        // 客户端模式：数据存 IndexedDB。纯静态部署不发任何 /api 请求；
+        // 本机选择（local）时探测一次后端可达性，供设置页置灰 / WebDAV 自动选路。
         set({ mode: 'client', authRequired: false });
+        if (detection.source === 'local' && !detection.staticOnly) {
+          const health = await probeHealth();
+          if (health !== null) set({ serverReachable: true, authMode: health.authMode, revision: health.revision });
+          else set({ serverReachable: false });
+        } else {
+          set({ serverReachable: false });
+        }
         return;
       }
       set({ mode: 'server' });
@@ -267,7 +351,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
       const health = detection.health ?? (await probeHealth());
       if (health === null) {
         // 显式服务器模式但后端不可达：保留服务器模式与本地数据，提示错误。
-        set({ syncError: '连不上服务器，请检查网络或后端地址' });
+        set({ syncError: '连不上服务器，请检查网络或后端地址', serverReachable: false });
         const fallback = await loadServerCache().catch(() => null);
         if (fallback !== null) {
           set({
@@ -281,11 +365,18 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
         }
         return;
       }
-      set({ authMode: health.authMode, revision: health.revision });
+      set({ authMode: health.authMode, revision: health.revision, serverReachable: true });
 
       const cache = await loadServerCache().catch(() => null);
       try {
-        const snapshot = normalizeSnapshot(await fetchData());
+        const full = normalizeFullSnapshot(await fetchFullData());
+        const snapshot = full;
+        // 服务器图片字节落到本机 IndexedDB，卡片在新设备上也能显示。
+        if (full.images.length > 0) {
+          const blobs: Record<string, Blob> = {};
+          for (const image of full.images) blobs[image.name] = new Blob([base64ToBytes(image.data) as BlobPart]);
+          await replaceImageBlobs(blobs);
+        }
         const localHasData = local.reminders.length > 0 || local.tags.length > 0;
         const serverEmpty =
           snapshot.revision === 0 &&
@@ -300,6 +391,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
             revision: snapshot.revision,
             settingsUpdatedAt: snapshot.settings.updatedAt,
             tombstones: snapshot.tombstones,
+            serverImageNames: snapshot.imageNames,
           });
         } else {
           const staleCache = cache !== null && cache.revision !== snapshot.revision;
@@ -379,6 +471,90 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
         canUploadLocal: false,
       });
       await pushToServer();
+    },
+
+    migrateToClient: async () => {
+      const startedAt = Date.now();
+      // 后端全量（含图片字节）→ 整体覆盖本机 IndexedDB。
+      const full = normalizeFullSnapshot(await fetchFullData());
+      const localReminders = toLocalReminders(full.reminders);
+      const localTags = toLocalTags(full.tags);
+      const mergedSettings = mergeServerSettings(get().settings, full.settings.value);
+      const blobs: Record<string, Blob> = {};
+      for (const image of full.images) blobs[image.name] = new Blob([base64ToBytes(image.data) as BlobPart]);
+      await replaceImageBlobs(blobs);
+      await savePersistedData({ reminders: localReminders, tags: localTags, settings: mergedSettings });
+      set({
+        mode: 'client',
+        reminders: localReminders,
+        tags: localTags,
+        settings: mergedSettings,
+        revision: full.revision,
+        settingsUpdatedAt: full.settings.updatedAt,
+        tombstones: [],
+        serverImageNames: full.imageNames,
+        serverReachable: true,
+        dirty: false,
+        syncError: null,
+        authRequired: false,
+        canUploadLocal: false,
+      });
+      writeStoredAppMode('client');
+      const actualImageNames = await listImageNames();
+      const expected = countsOf(full.reminders, full.tags, full.imageNames);
+      const actual = countsOf(localReminders, localTags, actualImageNames);
+      const verification = verifyMigration({
+        expected,
+        actual,
+        sampleOk: samplesMatch(full.reminders, localReminders, full.tags, localTags),
+        actualImageNames,
+      });
+      return {
+        direction: 'server-to-client',
+        counts: actual,
+        elapsedMs: Date.now() - startedAt,
+        revision: full.revision,
+        verification,
+      };
+    },
+
+    migrateToServer: async () => {
+      const startedAt = Date.now();
+      const { reminders, tags, settings } = get();
+      const at = Date.now();
+      // 本机全量（含图片字节）→ 整体覆盖服务器。
+      const localImageNames = await listImageNames();
+      const wireImages = [];
+      for (const name of localImageNames) {
+        const blob = await loadImageBlob(name);
+        if (blob === undefined) continue;
+        wireImages.push({ name, data: bytesToBase64(new Uint8Array(await blob.arrayBuffer())) });
+      }
+      const payload: ReplacePayload = {
+        reminders: toServerReminders(reminders, at).map(toSyncReminder),
+        tags: toServerTags(tags, at).map(toSyncTag),
+        settings: { value: syncedSettings(settings), updatedAt: at },
+        images: wireImages,
+      };
+      const result = await replaceData(payload);
+      const snapshot = normalizeSnapshot(result);
+      adoptSnapshot(snapshot, { mode: 'server', serverReachable: true });
+      writeStoredAppMode('server');
+      const expected = countsOf(reminders, tags, wireImages.map((image) => image.name));
+      const actual = countsOf(snapshot.reminders, snapshot.tags, snapshot.imageNames);
+      const verification = verifyMigration({
+        expected,
+        actual,
+        sampleOk: samplesMatch(reminders, snapshot.reminders, tags, snapshot.tags),
+        actualImageNames: snapshot.imageNames,
+      });
+      return {
+        direction: 'client-to-server',
+        counts: actual,
+        elapsedMs: Date.now() - startedAt,
+        revision: snapshot.revision,
+        verification,
+      };
     },
 
     addReminder: async (item) => {

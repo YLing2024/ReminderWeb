@@ -58,6 +58,8 @@ export interface AppSettings {
   appLockPasswordHash: StoredAppLock | null;
   /** 云备份：是否启用 WebDAV。 */
   webdavEnabled: boolean;
+  /** 云备份：客户端模式的连接方式（自动 / 同源代理 / 直连，M11 §3.2）。 */
+  webdavTransport: 'auto' | 'proxy' | 'direct';
   /** 云备份：服务器地址（完整 URL）。 */
   webdavServer: string;
   /** 云备份：Basic 认证用户名。 */
@@ -100,6 +102,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   appLockEnabled: false,
   appLockPasswordHash: null,
   webdavEnabled: false,
+  webdavTransport: 'auto',
   webdavServer: '',
   webdavUsername: '',
   webdavPassword: '',
