@@ -117,9 +117,12 @@ export const DEFAULT_NOTIFICATION_CONFIG: ReminderNotificationConfig = {
   notificationTimes: [],
 };
 
+/** 生日默认按年重复（上游生日即年度事件）；新增/切换为生日的默认值。 */
+export const BIRTHDAY_REPEAT: RepeatInfo = { interval: 1, unit: 'YEAR', endDate: null };
+
 /** 按上游默认值构造一个新提醒（id 由 store 分配）。 */
 export function createReminderItem(partial: Pick<ReminderItem, 'title' | 'date' | 'type'> & Partial<ReminderItem>): ReminderItem {
-  return {
+  const item: ReminderItem = {
     id: 0,
     endDate: null,
     isLunar: false,
@@ -149,4 +152,9 @@ export function createReminderItem(partial: Pick<ReminderItem, 'title' | 'date' 
     customFontStrokeColor: '',
     ...partial,
   };
+  // 新增生日（且调用方未显式指定重复）时自动补「每 1 年」。
+  if (item.type === 'BIRTHDAY' && item.repeatInfo === null && partial.repeatInfo === undefined) {
+    item.repeatInfo = { ...BIRTHDAY_REPEAT };
+  }
+  return item;
 }

@@ -10,6 +10,7 @@ import {
   solarToLunar,
 } from '../lib/lunar';
 import { parseLocalDate, toISODate, todayLocalDate, type LocalDate } from '../lib/local-date';
+import { applyTypeDefaults } from '../lib/reminder-rules';
 import { useReminderStore } from '../store/useReminderStore';
 import styles from './EditPage.module.css';
 
@@ -85,7 +86,7 @@ export default function EditPage() {
       setError('请填写标题');
       return;
     }
-    const normalized: ReminderItem = { ...draft, title };
+    const normalized: ReminderItem = applyTypeDefaults({ ...draft, title }, draft.type);
     await addTag(normalized.tag);
     if (isEditing) {
       await updateReminder(normalized);
@@ -180,7 +181,7 @@ export default function EditPage() {
                   type="radio"
                   name="type"
                   checked={draft.type === option.value}
-                  onChange={() => patch({ type: option.value })}
+                  onChange={() => setDraft((current) => applyTypeDefaults(current, option.value))}
                 />
                 <span>{option.label}</span>
               </label>
