@@ -214,7 +214,7 @@ async function send(
   try {
     // 一律经本应用后端转发：目标地址与凭据仅随本次请求发给后端，不落库、不写日志。
     const base = deps.apiBase ?? apiBase();
-    return await fetchImpl(`${base}/api/webdav`, {
+    const response = await fetchImpl(`${base}/api/webdav`, {
       method,
       credentials: requestCredentials(base),
       headers: {
@@ -226,6 +226,13 @@ async function send(
       body: body ?? null,
       signal: controller.signal,
     });
+    // 纯静态托管（SPA 回退）会把未知路径回 `index.html`：2xx + HTML 说明这不是后端转发接口，
+    // 给出明确提示，而不是「服务器返回的内容无法解析」。
+    const contentType = response.headers?.get?.('content-type') ?? '';
+    if (response.ok && contentType.toLowerCase().includes('text/html')) {
+      throw new WebDavError('NETWORK', '客户端模式的 WebDAV 备份需要本应用服务器在运行（用于转发请求）。');
+    }
+    return response;
   } catch (error) {
     throw mapFetchError(error);
   } finally {

@@ -78,4 +78,16 @@ describe('人话报错', () => {
     expect(error.message).toContain('本应用服务器在运行');
     expect(error.message).not.toContain('Failed to fetch');
   });
+
+  it('纯静态托管 SPA 回退（2xx + HTML）同样提示需要后端，而非解析错误', async () => {
+    const fetchImpl = (async () =>
+      new Response('<html>index</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })) as unknown as typeof fetch;
+    await expect(testConnection(CONFIG, { fetchImpl })).rejects.toMatchObject({
+      code: 'NETWORK',
+      message: expect.stringContaining('本应用服务器在运行'),
+    });
+  });
 });
