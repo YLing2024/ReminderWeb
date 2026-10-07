@@ -32,6 +32,19 @@ export function buildHeaderTitle(title: string, suffix: string): string {
   return [title.trim(), suffix.trim()].filter((part) => part.length > 0).join(' ');
 }
 
+/**
+ * 把底带文案拆成「日期前缀」与「星期X」，保证缩窄时丢的是前缀而不是星期。
+ * 农历卡片前缀去掉年份（对齐上游 formatLunarDateShort/getLunarMonthDayLabel 的月日口径，
+ * 如「腊月初四 星期四」），确保窄卡也不截断。
+ */
+export function splitReferenceText(text: string, isLunar: boolean): { prefix: string; weekday: string } {
+  const match = /^(.*?)\s*(星期[日一二三四五六])$/.exec(text);
+  const rawPrefix = match === null ? text : (match[1] ?? text);
+  const weekday = match === null ? '' : (match[2] ?? '');
+  const prefix = isLunar ? rawPrefix.replace(/^[^\s]*?年/, '') : rawPrefix;
+  return { prefix, weekday };
+}
+
 export function reminderDisplayInfo(
   item: ReminderItem,
   today: LocalDate,

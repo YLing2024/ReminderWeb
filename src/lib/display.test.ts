@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reminderDisplayInfo } from './display';
+import { reminderDisplayInfo, splitReferenceText } from './display';
 import { ld } from './local-date';
 import type { ReminderItem, TagItem } from '../types/reminder';
 import { buildReminderSections, flattenReminders, reminderSortValue } from './sort';
@@ -116,6 +116,21 @@ describe('reminderDisplayInfo 展示口径', () => {
       true,
     );
     expect(info.referenceText).toBe('二〇二六年七月十九 星期一');
+  });
+
+  it('底带拆分：农历卡去年前缀并保留星期，公历不动', () => {
+    expect(splitReferenceText('二〇二六年七月十九 星期一', true)).toEqual({
+      prefix: '七月十九',
+      weekday: '星期一',
+    });
+    expect(splitReferenceText('二〇二六年腊月初四 星期四', true)).toEqual({
+      prefix: '腊月初四',
+      weekday: '星期四',
+    });
+    expect(splitReferenceText('2026-12-31 星期四', false)).toEqual({
+      prefix: '2026-12-31',
+      weekday: '星期四',
+    });
   });
 });
 

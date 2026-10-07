@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { ReminderItem, ReminderType } from '../types/reminder';
-import { reminderDisplayInfo } from '../lib/display';
+import { reminderDisplayInfo, splitReferenceText } from '../lib/display';
 import { readableTextOn } from '../lib/contrast';
 import type { LocalDate } from '../lib/local-date';
 import styles from './ReminderCard.module.css';
@@ -10,13 +10,6 @@ const TYPE_COLOR: Record<ReminderType, string> = {
   COUNT_UP: 'var(--type-count-up)',
   BIRTHDAY: 'var(--type-birthday)',
 };
-
-/** 把底带文案拆成「日期前缀」与「星期X」，保证缩窄时丢的是前缀而不是星期。 */
-function splitReference(text: string): { prefix: string; weekday: string } {
-  const match = /^(.*?)\s*(星期[日一二三四五六])$/.exec(text);
-  if (match === null) return { prefix: text, weekday: '' };
-  return { prefix: match[1] ?? text, weekday: match[2] ?? '' };
-}
 
 function resolveBandColor(item: ReminderItem, tagColor: string | null): string {
   if (item.isCustomized && item.customHeaderColor.trim() !== '') {
@@ -42,7 +35,7 @@ export function ReminderCard({
   onRequestMenu?: (point: { x: number; y: number } | null) => void;
 }) {
   const info = reminderDisplayInfo(item, today, item.isLunar, true);
-  const reference = splitReference(info.referenceText);
+  const reference = splitReferenceText(info.referenceText, item.isLunar);
   // 浅色标签色时白字对比度不足，自动改用深色文字，保证 ≥4.5:1。
   const bandColor = resolveBandColor(item, tagColor);
   const bandTextColor = readableTextOn(bandColor);
