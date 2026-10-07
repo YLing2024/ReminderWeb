@@ -17,7 +17,7 @@ import {
 import { ConfirmDialog, IconButton, Toggle } from '../components/ui';
 import { WebDavSettings } from '../components/WebDavSettings';
 import { SEED_PALETTES } from '../lib/theme';
-import { hashPin, isValidPin, verifyPin } from '../lib/pin';
+import { hashPassword, isValidPassword, verifyStoredPassword } from '../lib/app-lock';
 import { buildIcs } from '../lib/ics';
 import { ensureLunar } from '../lib/lunar';
 import { todayLocalDate } from '../lib/local-date';
@@ -401,22 +401,22 @@ export default function SettingsPage() {
         <PinSetupDialog
           onClose={() => setShowPinDialog(false)}
           onSave={async (pin) => {
-            await updateSettings({ appLockPinHash: await hashPin(pin), appLockEnabled: true });
+            await updateSettings({ appLockPasswordHash: await hashPassword(pin), appLockEnabled: true });
             setShowPinDialog(false);
           }}
         />
       )}
 
-      {showDisablePin && settings.appLockPinHash !== null && (
+      {showDisablePin && settings.appLockPasswordHash !== null && (
         <PinVerifyDialog
           onClose={() => setShowDisablePin(false)}
           onVerify={async (pin) => {
-            const ok = await verifyPin(pin, settings.appLockPinHash!);
-            if (ok) {
+            const ok = await verifyStoredPassword(pin, settings.appLockPasswordHash!);
+            if (ok.ok) {
               await updateSettings({ appLockEnabled: false });
               setShowDisablePin(false);
             }
-            return ok;
+            return ok.ok;
           }}
         />
       )}
@@ -583,7 +583,7 @@ function PinSetupDialog({
   const [pin, setPin] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const valid = isValidPin(pin) && pin === confirm;
+  const valid = isValidPassword(pin) && pin === confirm;
 
   return (
     <div className={styles.dialogBackdrop} role="presentation" onClick={onClose}>
@@ -628,7 +628,7 @@ function PinSetupDialog({
             className={`${styles.textButton} ${styles.textButtonPrimary}`}
             disabled={!valid}
             onClick={() => {
-              if (!isValidPin(pin)) {
+              if (!isValidPassword(pin)) {
                 setError('PIN 需为 4–6 位数字');
                 return;
               }

@@ -1,9 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS } from './storage';
+import { DEFAULT_SETTINGS, migrateAppLockSettings } from './storage';
 
 describe('DEFAULT_SETTINGS 默认值', () => {
   it('默认主题色板对齐上游（首启动为蓝色系）', () => {
     expect(DEFAULT_SETTINGS.themeColorPalette).toBe('BLUE');
     expect(DEFAULT_SETTINGS.dynamicColorEnabled).toBe(true);
+  });
+
+  it('默认未开启应用锁、无密码凭据', () => {
+    expect(DEFAULT_SETTINGS.appLockEnabled).toBe(false);
+    expect(DEFAULT_SETTINGS.appLockPasswordHash).toBeNull();
+  });
+});
+
+describe('migrateAppLockSettings（旧 PIN 字段兼容）', () => {
+  it('把旧 appLockPinHash 搬运到 appLockPasswordHash 并删除旧键', () => {
+    const legacy = 'a'.repeat(64);
+    const migrated = migrateAppLockSettings({ appLockEnabled: true, appLockPinHash: legacy });
+    expect(migrated.appLockPasswordHash).toBe(legacy);
+    expect('appLockPinHash' in migrated).toBe(false);
+    expect(migrated.appLockEnabled).toBe(true);
+  });
+
+  it('已有新字段时不覆盖，其余设置原样保留', () => {
+    const migrated = migrateAppLockSettings({
+      themeOption: 'DARK',
+      appLockPasswordHash: { v: 2, algo: 'PBKDF2-SHA-256', salt: 's', iterations: 210_000, hash: 'h' },
+      appLockPinHash: 'b'.repeat(64),
+    });
+    expect(migrated.appLockPasswordHash).toEqual({
+      v: 2,
+      algo: 'PBKDF2-SHA-256',
+      salt: 's',
+      iterations: 210_000,
+      hash: 'h',
+    });
+    expect('appLockPinHash' in migrated).toBe(false);
+    expect(migrated.themeOption).toBe('DARK');
   });
 });

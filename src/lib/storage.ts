@@ -9,9 +9,15 @@
  * WebDAV 云备份凭据不单独建 key：作为 `AppSettings` 的 `webdavServer /
  * webdavUsername / webdavPassword` 字段，随结构化数据存在 `reminderweb:data` 这一键下。
  * 密码只进不出：不写日志、不进导出备份（`toBackupData` 一律置空 webDav 字段）。
+ *
+ * 应用锁密码同样只存本地：`AppSettings.appLockPasswordHash` 为 v2 PBKDF2 凭据对象
+ *   `{ v: 2, algo: 'PBKDF2-SHA-256', salt: <base64>, iterations: 210000, hash: <base64> }`；
+ * 旧版遗留的 v1 十六进制摘要字符串按原样读入，由解锁流程校验成功后升级为 v2。
+ * 无论 v1/v2，密码、盐、哈希都不写日志、不进导出备份。
  */
 import { createStore, del, get, keys, set, clear } from 'idb-keyval';
 import type { ReminderItem, TagItem } from '../types/reminder';
+import type { StoredAppLock } from './app-lock';
 import { normalizeReminderList, normalizeTagList } from './normalize';
 
 export const DATA_KEY = 'reminderweb:data';
@@ -44,8 +50,11 @@ export interface AppSettings {
   lastBackupAt: number | null;
   /** 安全：应用锁开关。 */
   appLockEnabled: boolean;
-  /** 安全：应用锁 PIN 的 SHA-256 十六进制摘要。 */
-  appLockPinHash: string | null;
+  /**
+   * 安全：应用锁凭据。v2 为 PBKDF2-SHA-256 加盐凭据对象；
+   * v1 为旧版 `sha256('reminderweb-pin:' + 密码)` 的十六进制字符串（解锁后自动升级）。
+   */
+  appLockPasswordHash: StoredAppLock | null;
   /** 云备份：是否启用 WebDAV。 */
   webdavEnabled: boolean;
   /** 云备份：服务器地址（完整 URL）。 */
@@ -88,7 +97,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backupEncryptionEnabled: true,
   lastBackupAt: null,
   appLockEnabled: false,
-  appLockPinHash: null,
+  appLockPasswordHash: null,
   webdavEnabled: false,
   webdavServer: '',
   webdavUsername: '',
@@ -105,6 +114,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/**
+ * 兼容旧版设置：历史上应用锁字段名为 `appLockPinHash`，新版为 `appLockPasswordHash`。
+ * 旧值（v1 十六进制摘要）原样搬运，保证老用户仍能用自己的旧密码解锁。
+ * 纯函数，便于单测。
+ */
+export function migrateAppLockSettings(rawSettings: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...rawSettings };
+  if (next.appLockPasswordHash === undefined && next.appLockPinHash !== undefined) {
+    next.appLockPasswordHash = next.appLockPinHash;
+  }
+  delete next.appLockPinHash;
+  return next;
+}
+
 export async function loadPersistedData(): Promise<PersistedData> {
   const raw: unknown = await get(DATA_KEY, store);
   if (!isRecord(raw)) {
@@ -113,7 +136,7 @@ export async function loadPersistedData(): Promise<PersistedData> {
   const reminders = Array.isArray(raw.reminders) ? normalizeReminderList(raw.reminders) : [];
   const tags = Array.isArray(raw.tags) ? normalizeTagList(raw.tags) : [];
   const settings = isRecord(raw.settings)
-    ? { ...DEFAULT_SETTINGS, ...(raw.settings as Partial<AppSettings>) }
+    ? { ...DEFAULT_SETTINGS, ...(migrateAppLockSettings(raw.settings) as Partial<AppSettings>) }
     : { ...DEFAULT_SETTINGS };
   return { reminders, tags, settings };
 }

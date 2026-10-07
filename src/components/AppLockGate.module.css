@@ -48,18 +48,6 @@
   margin-top: 8px;
 }
 
-.input {
-  width: 100%;
-  min-height: 52px;
-  text-align: center;
-  letter-spacing: 0.6em;
-  font-size: 22px;
-  border-radius: var(--radius-input);
-  border: 1px solid var(--md-sys-color-outline);
-  background: transparent;
-  color: var(--md-sys-color-on-surface);
-}
-
 .error {
   margin: 0;
   font-size: 13px;
@@ -81,4 +69,14 @@
 .submit:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.forgot {
+  margin-top: 4px;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+  cursor: pointer;
 }

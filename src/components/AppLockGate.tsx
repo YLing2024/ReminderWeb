@@ -1,17 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { LockIcon } from './icons';
-import { verifyPin } from '../lib/pin';
+import { PasswordField } from './PasswordField';
+import { ConfirmDialog } from './ui';
+import { verifyStoredPassword, type AppLockCredential, type StoredAppLock } from '../lib/app-lock';
 import { useReminderStore } from '../store/useReminderStore';
 import styles from './AppLockGate.module.css';
 
+const FORGOT_CONFIRM_WORD = '清空';
+
 /**
- * 应用锁：开启后，应用启动或从后台切回（页面重新可见）时需输入 PIN 解锁。
- * 未设置 PIN 或功能关闭时不拦截。
+ * 应用锁：开启后，应用启动或从后台切回（页面重新可见）时需输入应用锁密码解锁。
+ * 未设置密码或功能关闭时不拦截。密码为任意字符，v1 旧 PIN 解锁成功后自动升级为 v2。
  */
 export function AppLockGate({ children }: { children: React.ReactNode }) {
   const loaded = useReminderStore((state) => state.loaded);
   const settings = useReminderStore((state) => state.settings);
+  const updateSettings = useReminderStore((state) => state.updateSettings);
+  const resetAll = useReminderStore((state) => state.resetAll);
   const [locked, setLocked] = useState(true);
+  const [forgotOpen, setForgotOpen] = useState(false);
   const wasHidden = useRef(false);
 
   useEffect(() => {
@@ -27,9 +34,9 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  const active = loaded && settings.appLockEnabled && settings.appLockPinHash !== null;
-  const pinHash = settings.appLockPinHash;
-  if (!active || pinHash === null || !locked) return <>{children}</>;
+  const stored = settings.appLockPasswordHash;
+  const active = loaded && settings.appLockEnabled && stored !== null;
+  if (!active || stored === null || !locked) return <>{children}</>;
 
   return (
     <div className={styles.page}>
@@ -37,30 +44,61 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
         <span className={styles.icon}>
           <LockIcon width={40} height={40} />
         </span>
-        <h1 className={styles.title}>输入 PIN 解锁</h1>
+        <h1 className={styles.title}>输入密码解锁</h1>
         <p className={styles.hint}>已开启应用锁</p>
-        <UnlockForm hash={pinHash} onUnlock={() => setLocked(false)} />
+        <UnlockForm
+          stored={stored}
+          onUnlock={(upgraded) => {
+            if (upgraded !== null) void updateSettings({ appLockPasswordHash: upgraded });
+            setLocked(false);
+          }}
+        />
+        <button type="button" className={styles.forgot} onClick={() => setForgotOpen(true)}>
+          忘记密码？
+        </button>
       </div>
+
+      <ConfirmDialog
+        open={forgotOpen}
+        title="忘记密码"
+        message={`应用锁密码无法找回，只能清空本机全部数据后重新开始（提醒、标签与设置都会删除，云端备份需另行恢复）。请输入「${FORGOT_CONFIRM_WORD}」确认。`}
+        confirmText="清空全部数据"
+        danger
+        requireText={FORGOT_CONFIRM_WORD}
+        onCancel={() => setForgotOpen(false)}
+        onConfirm={() => {
+          void resetAll();
+          setForgotOpen(false);
+          setLocked(false);
+        }}
+      />
     </div>
   );
 }
 
-function UnlockForm({ hash, onUnlock }: { hash: string; onUnlock: () => void }) {
-  const [pin, setPin] = useState('');
+export function UnlockForm({
+  stored,
+  onUnlock,
+}: {
+  stored: StoredAppLock;
+  onUnlock: (upgraded: AppLockCredential | null) => void;
+}) {
+  const [password, setPassword] = useState('');
+  const [visible, setVisible] = useState(false);
   const [error, setError] = useState(false);
   const [checking, setChecking] = useState(false);
 
   const submit = async () => {
-    if (checking) return;
+    if (checking || password.length === 0) return;
     setChecking(true);
-    const ok = await verifyPin(pin, hash);
+    const result = await verifyStoredPassword(password, stored);
     setChecking(false);
-    if (ok) {
-      setPin('');
-      onUnlock();
+    if (result.ok) {
+      setPassword('');
+      onUnlock(result.upgraded);
     } else {
       setError(true);
-      setPin('');
+      setPassword('');
     }
   };
 
@@ -72,23 +110,21 @@ function UnlockForm({ hash, onUnlock }: { hash: string; onUnlock: () => void }) 
         void submit();
       }}
     >
-      <input
-        className={styles.input}
-        type="password"
-        inputMode="numeric"
-        autoComplete="off"
-        autoFocus
-        maxLength={6}
-        placeholder="····"
-        aria-label="PIN 码"
-        value={pin}
-        onChange={(event) => {
+      <PasswordField
+        value={password}
+        visible={visible}
+        onChange={(value) => {
           setError(false);
-          setPin(event.target.value.replace(/\D/g, '').slice(0, 6));
+          setPassword(value);
         }}
+        onToggleVisible={() => setVisible((current) => !current)}
+        autoComplete="current-password"
+        autoFocus
+        placeholder="应用锁密码"
+        ariaLabel="应用锁密码"
       />
-      {error && <p className={styles.error}>PIN 码不正确</p>}
-      <button type="submit" className={styles.submit} disabled={pin.length < 4 || checking}>
+      {error && <p className={styles.error}>密码不正确</p>}
+      <button type="submit" className={styles.submit} disabled={password.length === 0 || checking}>
         解锁
       </button>
     </form>
