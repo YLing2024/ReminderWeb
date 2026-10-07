@@ -76,6 +76,9 @@ export interface ReminderItem {
   customGlassRefraction?: number;
   customGlassHighlight?: number;
 
+  /** 同步元数据：最后一次修改时间（epoch 毫秒）；仅用于服务器同步，不进备份包。 */
+  updatedAt?: number;
+
   /** 兜底：安卓端未来新增的未知字段 */
   [key: string]: unknown;
 }
@@ -85,6 +88,8 @@ export interface TagItem {
   name: string;
   color: string; // "#2196F3"
   sortOrder: number;
+  /** 同步元数据：最后一次修改时间（epoch 毫秒）；仅用于服务器同步，不进备份包。 */
+  updatedAt?: number;
 }
 
 export interface BackupData {

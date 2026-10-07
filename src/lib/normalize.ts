@@ -139,15 +139,19 @@ export function normalizeReminderItem(raw: unknown): ReminderItem {
   return out;
 }
 
-/** 归一化标签；缺 `color` 补上游默认蓝，缺 `sortOrder` 补 0。 */
+/** 归一化标签；缺 `color` 补上游默认蓝，缺 `sortOrder` 补 0。保留同步元数据 `updatedAt`。 */
 export function normalizeTagItem(raw: unknown): TagItem {
   const source = isRecord(raw) ? raw : {};
-  return {
+  const tag: TagItem = {
     id: asInteger(source.id, 0),
     name: asString(source.name, ''),
     color: asString(source.color, '#2196F3'),
     sortOrder: asInteger(source.sortOrder, 0),
   };
+  if (typeof source.updatedAt === 'number' && Number.isFinite(source.updatedAt)) {
+    tag.updatedAt = source.updatedAt;
+  }
+  return tag;
 }
 
 /** 归一化提醒列表；非数组按空处理，逐条归一化。 */

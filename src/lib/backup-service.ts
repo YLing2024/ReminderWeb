@@ -29,11 +29,18 @@ export interface ImportResult {
   imageCount: number;
 }
 
+/** 去掉同步元数据 `updatedAt`，避免写入与安卓互通的备份包。 */
+function stripSyncMeta<T extends { updatedAt?: number }>(item: T): Omit<T, 'updatedAt'> {
+  const copy: T = { ...item };
+  delete copy.updatedAt;
+  return copy;
+}
+
 /** 由当前应用状态构造备份结构（未内联图片，图片随 zip 走）。 */
 export function toBackupData(reminders: ReminderItem[], tags: TagItem[], settings: AppSettings): BackupData {
   return {
-    reminders,
-    tags,
+    reminders: reminders.map((item) => stripSyncMeta(item)) as ReminderItem[],
+    tags: tags.map((item) => stripSyncMeta(item)) as TagItem[],
     themeOption: settings.themeOption,
     pureBlackEnabled: settings.pureBlackEnabled,
     cardColoringEnabled: settings.cardColoringEnabled,

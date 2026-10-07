@@ -1,0 +1,212 @@
+/**
+ * 后端 API 客户端（需求 §7）。
+ *
+ * 纯 `fetch` 封装：`credentials: 'same-origin'`、15s 超时、统一 `ApiError` 与中文文案映射，
+ * 风格与 `lib/webdav.ts` 一致。该模块不触碰 IndexedDB 与 React，便于单测 mock `fetch`。
+ */
+import type { ReminderItem, TagItem } from '../types/reminder';
+
+/** 每个请求的超时（毫秒）。 */
+export const API_TIMEOUT_MS = 15_000;
+
+/** 构建期后端地址前缀；空字符串表示与页面同源（`/api`）。 */
+export function apiBase(): string {
+  const configured = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
+  const trimmed = configured.trim();
+  if (trimmed === '') return '';
+  return trimmed.replace(/\/+$/, '');
+}
+
+/** 可注入依赖（测试用；生产走默认值）。 */
+export interface ApiDeps {
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  /** 覆盖地址前缀，便于测试。 */
+  base?: string;
+}
+
+export type AuthMode = 'builtin' | 'sso' | 'none';
+
+/** 同步层条目：在 `ReminderItem` / `TagItem` 基础上带 `updatedAt`。 */
+export type SyncReminder = ReminderItem & { updatedAt: number };
+export type SyncTag = TagItem & { updatedAt: number };
+
+export interface SyncTombstone {
+  id: number;
+  updatedAt: number;
+  kind: 'reminder' | 'tag';
+}
+
+export interface SyncSettings {
+  value: Record<string, unknown>;
+  updatedAt: number;
+}
+
+export interface ServerSnapshot {
+  revision: number;
+  reminders: SyncReminder[];
+  tags: SyncTag[];
+  settings: SyncSettings;
+  tombstones: SyncTombstone[];
+}
+
+export interface HealthInfo {
+  ok: boolean;
+  revision: number;
+  authMode: AuthMode;
+}
+
+export interface VersionInfo {
+  server: string;
+  version: string;
+  schemaVersion: number;
+}
+
+export interface PushPayload {
+  baseRevision: number;
+  reminders: SyncReminder[];
+  tags: SyncTag[];
+  settings: SyncSettings;
+  tombstones: SyncTombstone[];
+}
+
+export interface PushResult extends ServerSnapshot {
+  serverRevisionBefore: number;
+  baseRevision: number;
+  rejected: number;
+}
+
+export type ApiErrorCode =
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'BAD_REQUEST'
+  | 'CONFLICT'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'RATE_LIMITED'
+  | 'SERVER'
+  | 'TIMEOUT'
+  | 'NETWORK'
+  | 'HTTP'
+  | 'INVALID_RESPONSE';
+
+/** API 调用失败；`message` 为面向用户的中文文案。 */
+export class ApiError extends Error {
+  readonly code: ApiErrorCode;
+  readonly status: number | null;
+
+  constructor(code: ApiErrorCode, message: string, status: number | null = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
+/** 是否为未认证（401 / 需要重新登录）。 */
+export function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'UNAUTHORIZED';
+}
+
+/** HTTP 状态码 → 中文错误。 */
+export function mapHttpStatus(status: number): ApiError {
+  if (status === 400) return new ApiError('BAD_REQUEST', '请求内容不正确', status);
+  if (status === 401) return new ApiError('UNAUTHORIZED', '登录状态已过期，请重新登录', status);
+  if (status === 403) return new ApiError('FORBIDDEN', '没有权限执行该操作', status);
+  if (status === 404) return new ApiError('NOT_FOUND', '服务器上找不到该资源', status);
+  if (status === 409) return new ApiError('CONFLICT', '数据已在别处更新，请同步后重试', status);
+  if (status === 413) return new ApiError('PAYLOAD_TOO_LARGE', '数据过大，服务器拒绝接收', status);
+  if (status === 429) return new ApiError('RATE_LIMITED', '操作过于频繁，请稍后再试', status);
+  if (status >= 500) return new ApiError('SERVER', `服务器出错（${status}）`, status);
+  return new ApiError('HTTP', `服务器返回 ${status}`, status);
+}
+
+function mapFetchError(error: unknown): ApiError {
+  const name = error instanceof Error ? error.name : '';
+  if (name === 'AbortError') {
+    return new ApiError('TIMEOUT', '连接服务器超时，请检查网络后重试');
+  }
+  return new ApiError('NETWORK', '连不上服务器，请检查网络');
+}
+
+function buildUrl(path: string, deps: ApiDeps): string {
+  return `${deps.base ?? apiBase()}${path}`;
+}
+
+async function request<T>(
+  method: string,
+  path: string,
+  body: unknown,
+  deps: ApiDeps,
+): Promise<T> {
+  const fetchImpl = deps.fetchImpl ?? (globalThis.fetch as typeof fetch | undefined);
+  if (typeof fetchImpl !== 'function') {
+    throw new ApiError('NETWORK', '当前环境不支持网络请求');
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? API_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(buildUrl(path, deps), {
+      method,
+      credentials: 'same-origin',
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw mapHttpStatus(response.status);
+    if (response.status === 204) return undefined as T;
+    try {
+      return (await response.json()) as T;
+    } catch {
+      throw new ApiError('INVALID_RESPONSE', '服务器返回的内容无法解析', response.status);
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw mapFetchError(error);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 探测后端是否可达；失败返回 null（不抛出，用于回落本地模式）。 */
+export async function probeHealth(deps: ApiDeps = {}): Promise<HealthInfo | null> {
+  try {
+    const info = await request<HealthInfo>('GET', '/api/health', undefined, deps);
+    if (info !== null && typeof info === 'object' && info.ok === true) {
+      const authMode: AuthMode = info.authMode === 'sso' || info.authMode === 'none' ? info.authMode : 'builtin';
+      return { ok: true, revision: Number(info.revision) || 0, authMode };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function login(username: string, password: string, deps: ApiDeps = {}): Promise<{ username: string }> {
+  return request<{ username: string }>('POST', '/api/auth/login', { username, password }, deps);
+}
+
+export async function logout(deps: ApiDeps = {}): Promise<void> {
+  await request<unknown>('POST', '/api/auth/logout', undefined, deps);
+}
+
+export async function fetchMe(deps: ApiDeps = {}): Promise<{ username: string; authMode: AuthMode }> {
+  return request<{ username: string; authMode: AuthMode }>('GET', '/api/auth/me', undefined, deps);
+}
+
+export async function fetchVersion(deps: ApiDeps = {}): Promise<VersionInfo> {
+  return request<VersionInfo>('GET', '/api/version', undefined, deps);
+}
+
+export async function fetchData(deps: ApiDeps = {}): Promise<ServerSnapshot> {
+  return request<ServerSnapshot>('GET', '/api/data', undefined, deps);
+}
+
+export async function pushData(payload: PushPayload, deps: ApiDeps = {}): Promise<PushResult> {
+  return request<PushResult>('PUT', '/api/data', payload, deps);
+}
+
+/** SSO 模式登录跳转地址（沿用仓库既有网关约定）。 */
+export function ssoLoginUrl(next: string): string {
+  return `/_auth/login?next=${encodeURIComponent(next)}`;
+}
