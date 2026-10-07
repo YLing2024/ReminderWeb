@@ -6,6 +6,33 @@
 >
 > 本文件自包含：执行者无需任何对话上下文。
 
+## 0. 先修（M6 验收发现，必须在 M7 内一并完成）
+
+### 0.1 安卓备份包的条目形状与内部形状不一致（会丢数据）
+
+实测安卓版 v3.4.0 导出的 `metadata.json` 里，提醒条目**只有 7 个键**：
+
+```
+{ id, title, date, type, tag, isLunar, isPinned }     ← 没有 updatedAt / notes / repeatInfo 等
+```
+
+而内部形状（`src/types/reminder.ts`）是 `lunar` / `pinned` / `repeatInfo` / `notes` / 一堆卡片个性化字段，
+合并又依赖 `updatedAt`。因此：
+
+- **必须**把「安卓形状 ⇄ 内部形状」的映射抽成**一个共享的纯函数模块**（建议 `src/lib/android-shape.ts`），
+  **前端与后端都导入同一份**（前端现有的导入逻辑若已实现，就改成调用它，不得保留两套）；
+  - 字段映射：`isLunar → lunar`、`isPinned → pinned`，缺失字段按既有默认值补齐（与 `normalize.ts` 一致）；
+  - `updatedAt` 缺失时**由调用方传入**：M7 用**备份文件的 `getlastmodified`** 作为该批条目的 `updatedAt`
+    （同一次导入的条目用同一个值），保证合并可用且幂等；不得用 `Date.now()`（每次同步都会变，永远"有变化"）。
+- 服务端的 `parseItemList` 要能接受这种缺省条目（`id` 必需；`updatedAt` 缺失由导入路径补，API 路径仍要求携带）。
+- 测试：导入同一份安卓包两次 → 第二次**不得**产生新 revision 或新上传（幂等）；`isLunar/isPinned` 正确映射；
+  缺省字段被补齐；中文标题与农历标记不丢。
+
+### 0.2 缺失静态资源应 404，不应回退首页
+
+实测 `GET /assets/不存在.js` 返回 200 + `index.html`。带扩展名的路径（`/assets/*.js|css|png…`）找不到时
+应当返回 `404`，只有**无扩展名的前端路由**才回退 `index.html`（否则部署缺文件时会被静默掩盖）。补一条测试。
+
 ## 1. 数据流
 
 ```
