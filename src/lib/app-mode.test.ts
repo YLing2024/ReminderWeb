@@ -3,7 +3,18 @@
  * 与「客户端模式不发起任何请求」。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { detectAppMode, loadConfigMode, parseConfigMode, parseEnvMode, resolveAppMode } from './app-mode';
+import {
+  APP_MODE_STORAGE_KEY,
+  detectAppMode,
+  loadConfigMode,
+  parseConfigMode,
+  parseEnvMode,
+  parseStoredMode,
+  readStoredAppMode,
+  resolveAppMode,
+  resolveDetectedMode,
+  writeStoredAppMode,
+} from './app-mode';
 import type { HealthInfo } from './api';
 
 const HEALTH: HealthInfo = { ok: true, revision: 3, authMode: 'builtin' };
@@ -88,7 +99,7 @@ describe('detectAppMode', () => {
       fetchImpl: (async () => jsonResponse({ mode: 'server' })) as unknown as typeof fetch,
       probe,
     });
-    expect(detection).toEqual({ mode: 'server', source: 'config', health: null });
+    expect(detection).toEqual({ mode: 'server', source: 'config', health: null, staticOnly: false });
     expect(probe).not.toHaveBeenCalled();
   });
 
@@ -120,7 +131,75 @@ describe('detectAppMode', () => {
       probe,
     });
     expect(detection.mode).toBe('client');
+    expect(detection.staticOnly).toBe(true);
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(probe).not.toHaveBeenCalled();
+  });
+});
+
+describe('M11 §1：本机选择（localStorage）优先级最高', () => {
+  it('parseStoredMode：仅 server/client，其余 null', () => {
+    expect(parseStoredMode('server')).toBe('server');
+    expect(parseStoredMode('client')).toBe('client');
+    expect(parseStoredMode('auto')).toBeNull();
+    expect(parseStoredMode(null)).toBeNull();
+  });
+
+  it('readStoredAppMode / writeStoredAppMode：读写已解析结果', () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    };
+    expect(readStoredAppMode(storage)).toBeNull();
+    writeStoredAppMode('client', storage);
+    expect(store.get(APP_MODE_STORAGE_KEY)).toBe('client');
+    expect(readStoredAppMode(storage)).toBe('client');
+  });
+
+  it('本机选择高于 config.json / VITE_APP_MODE / 探测', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ mode: 'server' }));
+    const probe = vi.fn(async () => HEALTH);
+    const detection = await detectAppMode({
+      storedMode: 'client',
+      envMode: 'server',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      configUrl: 'https://static.example.com/config.json',
+      probe,
+    });
+    expect(detection).toEqual({ mode: 'client', source: 'local', health: null, staticOnly: false });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(probe).not.toHaveBeenCalled();
+
+    const server = await detectAppMode({ storedMode: 'server', envMode: 'client' });
+    expect(server).toEqual({ mode: 'server', source: 'local', health: null, staticOnly: false });
+  });
+
+  it('config.json client 视为纯静态（staticOnly），env server 非静态', async () => {
+    const fromConfig = await detectAppMode({
+      storedMode: null,
+      envMode: 'auto',
+      configUrl: '/config.json',
+      fetchImpl: (async () => jsonResponse({ mode: 'client' })) as unknown as typeof fetch,
+    });
+    expect(fromConfig).toEqual({ mode: 'client', source: 'config', health: null, staticOnly: true });
+
+    const fromEnv = await detectAppMode({ storedMode: null, envMode: 'server' });
+    expect(fromEnv).toEqual({ mode: 'server', source: 'env', health: null, staticOnly: false });
+  });
+
+  it('resolveDetectedMode：探测结果非静态', () => {
+    expect(resolveDetectedMode({ storedMode: null, fileMode: null, envMode: 'auto', health: HEALTH })).toEqual({
+      mode: 'server',
+      source: 'probe',
+      staticOnly: false,
+    });
+    expect(resolveDetectedMode({ storedMode: null, fileMode: null, envMode: 'auto', health: null })).toEqual({
+      mode: 'client',
+      source: 'probe',
+      staticOnly: false,
+    });
   });
 });
