@@ -8,6 +8,7 @@ const EditPage = lazy(() => import('./pages/EditPage'));
 const DetailPage = lazy(() => import('./pages/DetailPage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const TagPage = lazy(() => import('./pages/TagPage'));
+const DateCalculatorPage = lazy(() => import('./pages/DateCalculatorPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/reminder/:id" element={<DetailPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/tags" element={<TagPage />} />
+        <Route path="/calculator" element={<DateCalculatorPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
