@@ -39,6 +39,26 @@ describe('toBackupData 状态映射', () => {
     expect(data.cardBackgroundImages).toBeNull();
     expect(data.reminders).toHaveLength(1);
   });
+
+  it('导出映射不含应用锁字段（v / salt / iterations / hash）', () => {
+    const data = toBackupData([], [], {
+      ...DEFAULT_SETTINGS,
+      appLockEnabled: true,
+      appLockPasswordHash: {
+        v: 2,
+        algo: 'PBKDF2-SHA-256',
+        salt: 'c2FsdA==',
+        iterations: 210_000,
+        hash: 'aGFzaA==',
+      },
+    });
+    const json = JSON.stringify(data);
+    expect(json).not.toMatch(/"appLock/i);
+    expect(json).not.toMatch(/"salt"\s*:/);
+    expect(json).not.toMatch(/"iterations"\s*:/);
+    expect(json).not.toMatch(/"hash"\s*:/);
+    expect(json).not.toMatch(/"v"\s*:/);
+  });
 });
 
 describe('importBackup 坏包在写入本地前即失败', () => {
