@@ -147,6 +147,18 @@
   line-height: 1.6;
 }
 
+.dialogInput {
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 20px;
+  padding: 0 14px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--md-sys-color-outline);
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  font-size: 16px;
+}
+
 .dialogActions {
   display: flex;
   justify-content: flex-end;

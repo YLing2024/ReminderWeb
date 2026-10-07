@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import type { ReminderItem, TagItem } from '../types/reminder';
 import {
   DEFAULT_SETTINGS,
+  clearAllData,
   loadPersistedData,
   savePersistedData,
   type AppSettings,
@@ -28,6 +29,7 @@ interface ReminderStore {
   deleteTag: (id: number) => Promise<void>;
   moveTag: (id: number, direction: 'up' | 'down') => Promise<void>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
+  resetAll: () => Promise<void>;
 }
 
 function nextNumericId(items: Array<{ id: number }>): number {
@@ -144,6 +146,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
 
     updateSettings: async (partial) => {
       set({ settings: { ...get().settings, ...partial } });
+      await persist();
+    },
+
+    resetAll: async () => {
+      await clearAllData();
+      set({ reminders: [], tags: [], settings: { ...DEFAULT_SETTINGS } });
       await persist();
     },
   };

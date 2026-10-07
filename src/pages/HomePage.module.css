@@ -15,6 +15,11 @@
   justify-content: space-between;
   min-height: 64px;
   padding-top: env(safe-area-inset-top, 0);
+  transition: transform 0.2s ease;
+}
+
+.topBarHidden {
+  transform: translateY(-120%);
 }
 
 .wordmark {

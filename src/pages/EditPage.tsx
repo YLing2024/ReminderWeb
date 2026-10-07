@@ -49,6 +49,7 @@ export default function EditPage() {
   const addReminder = useReminderStore((state) => state.addReminder);
   const updateReminder = useReminderStore((state) => state.updateReminder);
   const addTag = useReminderStore((state) => state.addTag);
+  const defaultAdvanceDays = useReminderStore((state) => state.settings.defaultAdvanceDays);
 
   const existing = useMemo(
     () => (id === undefined ? undefined : reminders.find((item) => item.id === Number(id))),
@@ -382,7 +383,7 @@ export default function EditPage() {
               <button
                 type="button"
                 className={styles.addButton}
-                onClick={() => updateTimes([...notificationTimes, { daysBefore: 0, time: '09:00:00' }])}
+                onClick={() => updateTimes([...notificationTimes, { daysBefore: defaultAdvanceDays, time: '09:00:00' }])}
               >
                 <PlusIcon width={18} height={18} />
                 添加提醒时刻

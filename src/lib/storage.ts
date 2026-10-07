@@ -5,7 +5,7 @@
  * - 结构化数据一份存 key `reminderweb:data`；
  * - 图片按文件名存 `reminderweb:image:<name>`，与安卓 zip 内 `images/<name>` 引用一致。
  */
-import { createStore, del, get, keys, set } from 'idb-keyval';
+import { createStore, del, get, keys, set, clear } from 'idb-keyval';
 import type { ReminderItem, TagItem } from '../types/reminder';
 
 export const DATA_KEY = 'reminderweb:data';
@@ -23,6 +23,20 @@ export interface AppSettings {
   dynamicColorEnabled: boolean;
   themeColorPalette: string;
   customColorSeed: number | null;
+  /** 提醒：是否启用应用内通知（Web Notification 权限）。 */
+  notificationEnabled: boolean;
+  /** 提醒：默认提前天数。 */
+  defaultAdvanceDays: number;
+  /** 提醒：提醒方式（应用内通知 / 导出 .ics）。 */
+  reminderMethod: 'APP_NOTIFICATION' | 'ICS';
+  /** 数据：备份提醒开关。 */
+  backupReminderEnabled: boolean;
+  /** 数据：上次备份时间（epoch 毫秒），从未备份为 null。 */
+  lastBackupAt: number | null;
+  /** 安全：应用锁开关。 */
+  appLockEnabled: boolean;
+  /** 安全：应用锁 PIN 的 SHA-256 十六进制摘要。 */
+  appLockPinHash: string | null;
 }
 
 export interface PersistedData {
@@ -38,10 +52,17 @@ export const DEFAULT_SETTINGS: AppSettings = {
   homeCategoryEnabled: true,
   defaultPage: 'COUNTDOWN',
   viewMode: 'CARD',
-  scrollBehavior: 'AUTO_HIDE',
+  scrollBehavior: 'HIDE_BOTTOM_BAR',
   dynamicColorEnabled: true,
   themeColorPalette: 'PURPLE',
   customColorSeed: null,
+  notificationEnabled: false,
+  defaultAdvanceDays: 0,
+  reminderMethod: 'APP_NOTIFICATION',
+  backupReminderEnabled: false,
+  lastBackupAt: null,
+  appLockEnabled: false,
+  appLockPinHash: null,
 };
 
 const store = createStore('reminderweb', 'kv');
@@ -65,6 +86,11 @@ export async function loadPersistedData(): Promise<PersistedData> {
 
 export async function savePersistedData(data: PersistedData): Promise<void> {
   await set(DATA_KEY, data, store);
+}
+
+/** 清空本地全部数据（结构化数据与图片）。 */
+export async function clearAllData(): Promise<void> {
+  await clear(store);
 }
 
 export function imageKey(name: string): string {

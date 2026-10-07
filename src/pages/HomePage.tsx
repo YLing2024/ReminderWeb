@@ -52,25 +52,38 @@ export default function HomePage() {
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ReminderItem | null>(null);
   const [navHidden, setNavHidden] = useState(false);
+  const [topHidden, setTopHidden] = useState(false);
   const lastScroll = useRef(0);
 
   const today = todayLocalDate();
   const categoryEnabled = settings.homeCategoryEnabled;
   const viewMode = settings.viewMode;
+  const hidesTop = settings.scrollBehavior === 'HIDE_TOP_BAR' || settings.scrollBehavior === 'HIDE_BOTH';
+  const hidesBottom = settings.scrollBehavior === 'HIDE_BOTTOM_BAR' || settings.scrollBehavior === 'HIDE_BOTH';
 
   useEffect(() => {
+    if (settings.scrollBehavior === 'NONE') {
+      setNavHidden(false);
+      setTopHidden(false);
+      return;
+    }
     const onScroll = () => {
       const y = window.scrollY;
       if (y > lastScroll.current + 8 && y > 80) {
-        setNavHidden(true);
+        if (hidesBottom) setNavHidden(true);
+        if (hidesTop) setTopHidden(true);
       } else if (y < lastScroll.current - 8) {
         setNavHidden(false);
+        setTopHidden(false);
       }
       lastScroll.current = y;
     };
+    lastScroll.current = window.scrollY;
+    setNavHidden(false);
+    setTopHidden(false);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [settings.scrollBehavior, hidesBottom, hidesTop]);
 
   const visibleItems = useMemo(() => {
     if (!categoryEnabled) return reminders;
@@ -132,7 +145,7 @@ export default function HomePage() {
       <HomeNav category={category} onChange={setCategory} hidden={navHidden || !categoryEnabled} />
 
       <div className={styles.content}>
-        <header className={styles.topBar}>
+        <header className={`${styles.topBar} ${topHidden ? styles.topBarHidden : ''}`}>
           <span className={styles.wordmark}>Reminder</span>
           <div className={styles.topActions}>
             <div className={styles.viewSwitch} role="group" aria-label="视图切换">

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import styles from './ui.module.css';
 
 export function IconButton({
@@ -118,6 +118,7 @@ export function ConfirmDialog({
   confirmText = '确定',
   cancelText = '取消',
   danger = false,
+  requireText,
   onConfirm,
   onCancel,
 }: {
@@ -127,10 +128,17 @@ export function ConfirmDialog({
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  /** 设置后需在输入框中原样输入该词才能确认。 */
+  requireText?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const [typed, setTyped] = useState('');
+  useEffect(() => {
+    if (open) setTyped('');
+  }, [open]);
   if (!open) return null;
+  const blocked = requireText !== undefined && typed.trim() !== requireText;
   return (
     <div className={styles.dialogBackdrop} role="presentation" onClick={onCancel}>
       <div
@@ -142,6 +150,16 @@ export function ConfirmDialog({
       >
         <h2 className={styles.dialogTitle}>{title}</h2>
         <p className={styles.dialogMessage}>{message}</p>
+        {requireText !== undefined && (
+          <input
+            className={styles.dialogInput}
+            value={typed}
+            placeholder={requireText}
+            aria-label="确认词"
+            autoFocus
+            onChange={(event) => setTyped(event.target.value)}
+          />
+        )}
         <div className={styles.dialogActions}>
           <button type="button" className={styles.textButton} onClick={onCancel}>
             {cancelText}
@@ -149,6 +167,7 @@ export function ConfirmDialog({
           <button
             type="button"
             className={`${styles.textButton} ${danger ? styles.textButtonDanger : styles.textButtonPrimary}`}
+            disabled={blocked}
             onClick={onConfirm}
           >
             {confirmText}

@@ -2,7 +2,7 @@
   position: fixed;
   z-index: 40;
   background: var(--md-sys-color-surface);
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 /* 手机：底部导航 */
@@ -68,6 +68,8 @@
 
   .navHidden {
     transform: none;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .item {
