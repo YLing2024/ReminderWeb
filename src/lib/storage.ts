@@ -58,7 +58,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   viewMode: 'CARD',
   scrollBehavior: 'HIDE_BOTTOM_BAR',
   dynamicColorEnabled: true,
-  themeColorPalette: 'PURPLE',
+  themeColorPalette: 'BLUE',
   customColorSeed: null,
   notificationEnabled: false,
   defaultAdvanceDays: 0,
