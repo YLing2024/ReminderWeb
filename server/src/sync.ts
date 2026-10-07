@@ -9,8 +9,9 @@
  *   5. 有变化或本机有待上传改动时，上传一份新包；
  *   6. 按保留份数只清理**本服务上传过**的旧包（绝不碰安卓端的历史备份）。
  *
- * 自动同步开关 / 间隔 / 保留份数来自 SQLite（`sync-config.ts`），改动立即重排定时器；
- * 环境变量只作初始默认值。手动操作（立即同步 / 立即备份 / 恢复 / 删除）不受开关限制。
+ * 连接与参数（地址 / 用户名 / 口令 / 开关 / 间隔 / 保留份数）来自 SQLite 的服务器级设置
+ * （`server-settings.ts`），环境变量只作首次默认值；每个动作前重新读取，改完立即生效。
+ * 设置改动经页面写入后由路由调用 `reloadSettings()` 重排定时器。手动操作不受开关限制。
  *
  * 本机数据变更 → `markLocalChange()` 按 debounce 合并节流。
  * 任何异常都不致命：脱敏记日志 + 写状态 + 下轮继续 + 指数退避（上限 4× 间隔）。
@@ -31,11 +32,10 @@ import type { Logger } from './log.ts';
 import {
   applySyncConfigPatch,
   parseSyncConfigPatch,
-  readSyncConfig,
   syncConfigView,
-  type StoredSyncConfig,
   type SyncConfigView,
 } from './sync-config.ts';
+import { readServerSettings, type ServerSettings } from './server-settings.ts';
 import {
   deleteFile,
   downloadFile,
@@ -43,8 +43,8 @@ import {
   listBackups,
   uploadFile,
   WebDavError,
-  webDavConfigFrom,
   type RemoteFile,
+  type WebDavConfig,
 } from './webdav.ts';
 
 export type SyncAction = 'upload' | 'pull' | 'restore' | 'none';
@@ -146,7 +146,8 @@ export class SyncEngine {
   private pollTimer: unknown = null;
   private backoffMs = 0;
   private remoteFiles: RemoteFile[] = [];
-  private syncConfig: StoredSyncConfig;
+  /** 最近一次读取的服务器级设置（用于排期；动作前会重新读取）。 */
+  private settings: ServerSettings;
   private intervalMs: number;
   /** 下次自动同步的预计时间戳；null 表示未排期。 */
   private nextPollAt: number | null = null;
@@ -157,8 +158,8 @@ export class SyncEngine {
     this.logger = logger;
     this.deps = deps;
     this.debounceMs = config.webdavDebounceSeconds * 1000;
-    this.syncConfig = readSyncConfig(db, config);
-    this.intervalMs = this.syncConfig.intervalMinutes * 60_000;
+    this.settings = readServerSettings(db, config);
+    this.intervalMs = this.settings.webdavIntervalMinutes * 60_000;
     this.backoffMs = this.intervalMs;
   }
 
@@ -166,27 +167,55 @@ export class SyncEngine {
     return this.deps.now?.() ?? Date.now();
   }
 
+  /** 动作前读取当前设置：改完立即生效，无需重启。 */
+  private current(): ServerSettings {
+    return readServerSettings(this.db, this.config);
+  }
+
   private get enabled(): boolean {
-    return this.syncConfig.enabled;
+    return this.settings.webdavEnabled;
+  }
+
+  /** 构造 WebDAV 客户端配置（凭据只在此处从设置读取，绝不外泄）。 */
+  private webDav(settings: ServerSettings): WebDavConfig {
+    return {
+      url: settings.webdavUrl,
+      username: settings.webdavUsername,
+      password: settings.webdavPassword,
+      timeoutMs: this.config.webdavTimeoutSeconds * 1000,
+    };
   }
 
   /** 当前同步配置视图（不含凭据）。 */
   configView(): SyncConfigView {
-    return syncConfigView(this.syncConfig, this.config);
+    const stored = {
+      enabled: this.settings.webdavEnabled,
+      intervalMinutes: this.settings.webdavIntervalMinutes,
+      keep: this.settings.webdavKeep,
+    };
+    return syncConfigView(stored, this.settings.webdavUrl);
   }
 
   /** 更新同步配置并立即重排定时器；非法值抛 `SyncConfigError`。 */
   updateConfig(raw: unknown): SyncConfigView {
     const patch = parseSyncConfigPatch(raw);
     const previousEnabled = this.enabled;
-    this.syncConfig = applySyncConfigPatch(this.db, this.config, patch);
+    applySyncConfigPatch(this.db, this.config, patch);
+    this.settings = this.current();
     this.applySchedule(previousEnabled);
     return this.configView();
   }
 
+  /** 外部（页面）改动设置后调用：重读设置并立即重排定时器。 */
+  reloadSettings(): void {
+    const previousEnabled = this.enabled;
+    this.settings = this.current();
+    this.applySchedule(previousEnabled);
+  }
+
   /** 应用当前配置到定时器：关闭即停；从关到开立即排一次；间隔变化立即改用新间隔。 */
   private applySchedule(previousEnabled: boolean): void {
-    this.intervalMs = this.syncConfig.intervalMinutes * 60_000;
+    this.intervalMs = this.settings.webdavIntervalMinutes * 60_000;
     this.backoffMs = this.intervalMs;
     if (!this.enabled) {
       this.clearPoll();
@@ -240,7 +269,7 @@ export class SyncEngine {
     const rawError = getMeta(this.db, META.lastError);
     return {
       enabled: this.enabled,
-      url: this.enabled ? this.config.webdavUrl : '',
+      url: this.enabled ? this.settings.webdavUrl : '',
       lastSyncAt: parseNumber(getMeta(this.db, META.lastSyncAt)),
       lastUploadAt: parseNumber(getMeta(this.db, META.lastUploadAt)),
       lastResult,
@@ -282,7 +311,7 @@ export class SyncEngine {
 
   /** 本机数据变更：自动同步开启时置 pending 并按 debounce 合并节流。 */
   markLocalChange(): void {
-    if (!this.enabled) return;
+    if (!this.current().webdavEnabled) return;
     this.pending = true;
     this.scheduleDebounce();
   }
@@ -306,9 +335,10 @@ export class SyncEngine {
   /** 只上传不拉取（`POST /api/sync/upload`）；已有任务在跑时返回 null（调用方 409）。 */
   async runUpload(): Promise<UploadResult | null> {
     return this.serialize(async () => {
-      const client = webDavConfigFrom(this.config);
+      const settings = this.current();
+      const client = this.webDav(settings);
       const dep = this.deps.fetchImpl === undefined ? {} : { fetchImpl: this.deps.fetchImpl };
-      const info = await this.upload(client, dep);
+      const info = await this.upload(client, dep, settings.webdavKeep);
       setMeta(this.db, META.lastAction, 'upload');
       return info;
     });
@@ -316,7 +346,7 @@ export class SyncEngine {
 
   /** 列出云端备份（时间倒序）；任何 reminder-backup-*.zip 都可恢复。 */
   async listFiles(): Promise<RemoteBackupEntry[]> {
-    const client = webDavConfigFrom(this.config);
+    const client = this.webDav(this.current());
     const dep = this.deps.fetchImpl === undefined ? {} : { fetchImpl: this.deps.fetchImpl };
     const files = await listBackups(client, dep);
     this.remoteFiles = files;
@@ -335,7 +365,7 @@ export class SyncEngine {
   async restore(name: string): Promise<RestoreResult | null> {
     if (!isValidBackupName(name)) throw new SyncActionError(400, 'invalid_name', '备份文件名不合法');
     return this.serialize(async () => {
-      const client = webDavConfigFrom(this.config);
+      const client = this.webDav(this.current());
       const dep = this.deps.fetchImpl === undefined ? {} : { fetchImpl: this.deps.fetchImpl };
       const files = await listBackups(client, dep);
       this.remoteFiles = files;
@@ -370,7 +400,7 @@ export class SyncEngine {
   async deleteRemote(name: string): Promise<'deleted' | null> {
     if (!isValidBackupName(name)) throw new SyncActionError(400, 'invalid_name', '备份文件名不合法');
     return this.serialize<'deleted'>(async () => {
-      const client = webDavConfigFrom(this.config);
+      const client = this.webDav(this.current());
       const dep = this.deps.fetchImpl === undefined ? {} : { fetchImpl: this.deps.fetchImpl };
       const files = await listBackups(client, dep);
       this.remoteFiles = files;
@@ -413,7 +443,8 @@ export class SyncEngine {
   private async execute(): Promise<SyncStatus> {
     const startedAt = this.now();
     try {
-      const client = webDavConfigFrom(this.config);
+      const settings = this.current();
+      const client = this.webDav(settings);
       const dep = this.deps.fetchImpl === undefined ? {} : { fetchImpl: this.deps.fetchImpl };
       const files = await listBackups(client, dep);
       this.remoteFiles = files;
@@ -424,7 +455,7 @@ export class SyncEngine {
 
       if (files.length === 0) {
         // 空远端：上传当前数据作为基线。
-        await this.upload(client, dep);
+        await this.upload(client, dep, settings.webdavKeep);
         uploaded = true;
       } else {
         const newest = files[0]!;
@@ -459,7 +490,7 @@ export class SyncEngine {
         }
 
         if (mergedChanged || this.pending) {
-          await this.upload(client, dep);
+          await this.upload(client, dep, settings.webdavKeep);
           uploaded = true;
         }
       }
@@ -472,8 +503,9 @@ export class SyncEngine {
   }
 
   private async upload(
-    client: ReturnType<typeof webDavConfigFrom>,
+    client: WebDavConfig,
     dep: { fetchImpl?: typeof fetch },
+    keep: number,
   ): Promise<UploadResult> {
     const metadataJson = buildBackupMetadata(readServerData(this.db));
     const bytes = encodeArchive({ metadataJson }, this.config.webdavEncrypt);
@@ -493,18 +525,18 @@ export class SyncEngine {
 
     const names = [fileName, ...this.uploadedNames().filter((name) => name !== fileName)];
     this.saveUploadedNames(names);
-    await this.prune(client, dep);
+    await this.prune(client, dep, keep);
     this.pending = false;
     return { name: fileName, size: uploaded?.size ?? bytes.length, lastUploadAt: uploadedAt };
   }
 
   /** 仅清理本服务上传过的旧包，保留最新 `keep` 份。 */
-  private async prune(client: ReturnType<typeof webDavConfigFrom>, dep: { fetchImpl?: typeof fetch }): Promise<void> {
-    const keep = Math.max(1, this.syncConfig.keep);
+  private async prune(client: WebDavConfig, dep: { fetchImpl?: typeof fetch }, keep: number): Promise<void> {
+    const effectiveKeep = Math.max(1, keep);
     const names = [...new Set(this.uploadedNames())].sort((a, b) => b.localeCompare(a));
-    const kept = names.slice(0, keep);
+    const kept = names.slice(0, effectiveKeep);
     const remote = new Set(this.remoteFiles.map((file) => file.name));
-    for (const name of names.slice(keep)) {
+    for (const name of names.slice(effectiveKeep)) {
       if (!remote.has(name)) continue;
       try {
         await deleteFile(client, name, dep);

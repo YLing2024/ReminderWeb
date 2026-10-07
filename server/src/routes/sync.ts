@@ -19,6 +19,7 @@ import {
   syncConfigView,
   SyncConfigError,
 } from '../sync-config.ts';
+import { readServerSettings } from '../server-settings.ts';
 import { WebDavError } from '../webdav.ts';
 
 const DISABLED: SyncStatus = {
@@ -54,7 +55,8 @@ export async function handleSyncNow(ctx: RouteContext): Promise<RouteResponse> {
 export function handleSyncConfigGet(ctx: RouteContext): RouteResponse {
   if (ctx.sync !== null) return { status: 200, body: ctx.sync.configView() };
   const stored = readSyncConfig(ctx.db, ctx.config);
-  return { status: 200, body: syncConfigView(stored, ctx.config) };
+  const url = readServerSettings(ctx.db, ctx.config).webdavUrl;
+  return { status: 200, body: syncConfigView(stored, url) };
 }
 
 export function handleSyncConfigPut(ctx: RouteContext): RouteResponse {
@@ -62,7 +64,8 @@ export function handleSyncConfigPut(ctx: RouteContext): RouteResponse {
     if (ctx.sync !== null) return { status: 200, body: ctx.sync.updateConfig(ctx.body) };
     const patch = parseSyncConfigPatch(ctx.body);
     const stored = applySyncConfigPatch(ctx.db, ctx.config, patch);
-    return { status: 200, body: syncConfigView(stored, ctx.config) };
+    const url = readServerSettings(ctx.db, ctx.config).webdavUrl;
+    return { status: 200, body: syncConfigView(stored, url) };
   } catch (error) {
     if (error instanceof SyncConfigError) {
       return { status: 400, body: { error: 'invalid_config', message: error.message } };

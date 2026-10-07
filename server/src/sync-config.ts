@@ -1,15 +1,17 @@
 /**
- * 同步配置持久化（M9 §1）。
+ * 同步配置（M9 §1）——**兼容视图**。
  *
- * 自动同步开关 / 同步间隔 / 保留份数存在 SQLite 的 `meta` 表里，对所有设备一致。
- * 环境变量退化为**初始默认值**：首次读取（meta 里还没有这三项）时按 env 落库，
- * 之后一律以库里的值为准；用户在界面改过就保持，重启不丢。
+ * 自动同步开关 / 间隔 / 保留份数统一存在 `server-settings.ts` 的库里
+ * （与页面上可编辑的 WebDAV 设置同一套键）。本模块只保留旧接口的
+ * 视图形状与校验语义（间隔白名单 5/10/30/60、保留份数 1–50），
+ * 供 `GET/PUT /api/sync/config` 与 `SyncEngine.updateConfig` 继续使用，
+ * 不再自己维护第二套存储。
  *
- * 凭据（URL / 用户名 / 口令）仍然只从环境变量读，绝不进库、绝不返回。
+ * 凭据（URL / 用户名 / 口令）由 `server-settings.ts` 持有，绝不在这里出现。
  */
 import type { DatabaseSync } from 'node:sqlite';
 import type { Config } from './config.ts';
-import { getMeta, setMeta } from './db.ts';
+import { readServerSettings, writeServerSettings } from './server-settings.ts';
 
 /** 允许的同步间隔（分钟）。 */
 export const SYNC_INTERVALS: readonly number[] = [5, 10, 30, 60];
@@ -19,12 +21,6 @@ export const SYNC_KEEP_MAX = 50;
 
 const DEFAULT_INTERVAL = 10;
 const DEFAULT_KEEP = 10;
-
-const KEYS = {
-  enabled: 'syncConfig.enabled',
-  intervalMinutes: 'syncConfig.intervalMinutes',
-  keep: 'syncConfig.keep',
-} as const;
 
 export interface StoredSyncConfig {
   enabled: boolean;
@@ -63,42 +59,35 @@ export function normalizeKeep(value: number): number {
   return Math.min(SYNC_KEEP_MAX, Math.max(SYNC_KEEP_MIN, Math.trunc(value)));
 }
 
-/** 读取同步配置；首次读取时按环境变量落库。 */
+/** 读取同步配置（来自统一设置；兼容视图不做范围夹取，合法校验在写入侧）。 */
 export function readSyncConfig(db: DatabaseSync, config: Config): StoredSyncConfig {
-  const enabled = getMeta(db, KEYS.enabled);
-  const interval = getMeta(db, KEYS.intervalMinutes);
-  const keep = getMeta(db, KEYS.keep);
-  if (enabled !== undefined && interval !== undefined && keep !== undefined) {
-    return {
-      enabled: enabled === '1',
-      intervalMinutes: normalizeInterval(Number(interval)),
-      keep: normalizeKeep(Number(keep)),
-    };
-  }
-  const seeded: StoredSyncConfig = {
-    enabled: config.webdavEnabled,
-    intervalMinutes: normalizeInterval(config.webdavIntervalMinutes),
-    keep: normalizeKeep(config.webdavKeep),
+  const settings = readServerSettings(db, config);
+  return {
+    enabled: settings.webdavEnabled,
+    intervalMinutes: settings.webdavIntervalMinutes,
+    keep: settings.webdavKeep,
   };
-  writeSyncConfig(db, seeded);
-  return seeded;
 }
 
-/** 落库（三项一起写，保证不会出现半套配置）。 */
-export function writeSyncConfig(db: DatabaseSync, value: StoredSyncConfig): void {
-  setMeta(db, KEYS.enabled, value.enabled ? '1' : '0');
-  setMeta(db, KEYS.intervalMinutes, String(value.intervalMinutes));
-  setMeta(db, KEYS.keep, String(value.keep));
+/** 写回同步配置（三项一起写，落到统一设置）。 */
+export function writeSyncConfig(db: DatabaseSync, config: Config, value: StoredSyncConfig): void {
+  const settings = readServerSettings(db, config);
+  writeServerSettings(db, {
+    ...settings,
+    webdavEnabled: value.enabled,
+    webdavIntervalMinutes: value.intervalMinutes,
+    webdavKeep: value.keep,
+  });
 }
 
 /** 构造对外的配置视图（含可选项；`url` 未启用时为空串）。 */
-export function syncConfigView(stored: StoredSyncConfig, config: Config): SyncConfigView {
+export function syncConfigView(stored: StoredSyncConfig, url: string): SyncConfigView {
   return {
     enabled: stored.enabled,
     intervalMinutes: stored.intervalMinutes,
     keep: stored.keep,
     options: { intervals: [...SYNC_INTERVALS], keepRange: [SYNC_KEEP_MIN, SYNC_KEEP_MAX] },
-    url: stored.enabled ? config.webdavUrl : '',
+    url: stored.enabled ? url : '',
   };
 }
 
@@ -148,6 +137,6 @@ export function applySyncConfigPatch(
     intervalMinutes: patch.intervalMinutes ?? current.intervalMinutes,
     keep: patch.keep ?? current.keep,
   };
-  writeSyncConfig(db, next);
+  writeSyncConfig(db, config, next);
   return next;
 }

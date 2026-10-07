@@ -14,7 +14,7 @@ import {
   buildAuthHeader,
 } from '../webdav.ts';
 import { checkRelayTarget } from '../ssrf.ts';
-import { readRelayAllowPrivate } from '../server-settings.ts';
+import { readServerSettings } from '../server-settings.ts';
 import type { RouteContext, RouteResponse } from '../http.ts';
 
 /** 允许转发的动词。 */
@@ -47,7 +47,7 @@ export async function handleWebDavRelay(ctx: RouteContext): Promise<RouteRespons
     return { status: 400, body: { error: 'missing_target', message: '缺少目标地址' } };
   }
 
-  const allowPrivate = readRelayAllowPrivate(ctx.db, ctx.config);
+  const allowPrivate = readServerSettings(ctx.db, ctx.config).relayAllowPrivate;
   const check = checkRelayTarget(target.trim(), allowPrivate);
   if (!check.ok) {
     // 可读错误并指向设置页开关（M12 §3.1）。

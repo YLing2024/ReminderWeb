@@ -148,7 +148,8 @@ test('relayAllowPrivate 开关：关=拒内网 403、开=放行；非法值 400'
   try {
     const initial = await fetch(`${ts.url}/api/webdav/config`);
     assert.equal(initial.status, 200);
-    assert.deepEqual(await initial.json(), { relayAllowPrivate: false });
+    // GET 现在一并返回 WebDAV 设置；此处只关心 relayAllowPrivate，其余字段单独覆盖。
+    assert.equal(((await initial.json()) as Record<string, unknown>).relayAllowPrivate, false);
 
     const denied = await relay();
     assert.equal(denied.status, 403);
@@ -160,7 +161,7 @@ test('relayAllowPrivate 开关：关=拒内网 403、开=放行；非法值 400'
       body: JSON.stringify({ relayAllowPrivate: true }),
     });
     assert.equal(enabled.status, 200);
-    assert.deepEqual(await enabled.json(), { relayAllowPrivate: true });
+    assert.equal(((await enabled.json()) as Record<string, unknown>).relayAllowPrivate, true);
 
     const allowed = await relay();
     assert.equal(allowed.status, 207);
@@ -190,14 +191,20 @@ test('relayAllowPrivate 开关：关=拒内网 403、开=放行；非法值 400'
 test('relayAllowPrivate：环境变量仅作首次默认值，落库后以库为准', async () => {
   const ts = await startTestServer({ env: { AUTH_MODE: 'none', ...ALLOW_PRIVATE_ENV } });
   try {
-    assert.deepEqual(await (await fetch(`${ts.url}/api/webdav/config`)).json(), { relayAllowPrivate: true });
+    assert.equal(
+      ((await (await fetch(`${ts.url}/api/webdav/config`)).json()) as Record<string, unknown>).relayAllowPrivate,
+      true,
+    );
     await fetch(`${ts.url}/api/webdav/config`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ relayAllowPrivate: false }),
     });
     // 同一进程内再次读取：以库里的 false 为准，env 不再生效。
-    assert.deepEqual(await (await fetch(`${ts.url}/api/webdav/config`)).json(), { relayAllowPrivate: false });
+    assert.equal(
+      ((await (await fetch(`${ts.url}/api/webdav/config`)).json()) as Record<string, unknown>).relayAllowPrivate,
+      false,
+    );
   } finally {
     await ts.close();
   }

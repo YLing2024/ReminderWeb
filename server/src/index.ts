@@ -44,11 +44,11 @@ function boot(): void {
   }
 
   const rateLimiter = createRateLimiter({ limit: config.loginRateLimit });
-  // 只要配置了目录地址就创建引擎：自动同步开关已迁到库里（M9），
-  // 初始开关来自 WEBDAV_ENABLED，之后由界面控制，无需改 env 重启。
-  const sync = config.webdavUrl !== '' ? new SyncEngine(config, db, logger) : null;
+  // 始终创建引擎：WebDAV 连接与开关都可在页面修改（存库，M13）。
+  // 初始值来自环境变量（首次默认），关闭时引擎不排期。
+  const sync = new SyncEngine(config, db, logger);
   const server: Server = createAppServer({ config, db, rateLimiter, logger, sync });
-  sync?.start();
+  sync.start();
 
   server.on('error', (error: unknown) => {
     logger.error(`服务器错误：${error instanceof Error ? error.message : '未知错误'}`);
