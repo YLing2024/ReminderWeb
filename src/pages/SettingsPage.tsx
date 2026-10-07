@@ -16,6 +16,9 @@ import {
 import { ConfirmDialog, IconButton, Toggle } from '../components/ui';
 import { SEED_PALETTES } from '../lib/theme';
 import { hashPin, isValidPin, verifyPin } from '../lib/pin';
+import { buildIcs } from '../lib/ics';
+import { ensureLunar } from '../lib/lunar';
+import { todayLocalDate } from '../lib/local-date';
 import { useReminderStore } from '../store/useReminderStore';
 import styles from './SettingsPage.module.css';
 
@@ -53,6 +56,7 @@ export default function SettingsPage() {
   const settings = useReminderStore((state) => state.settings);
   const updateSettings = useReminderStore((state) => state.updateSettings);
   const resetAll = useReminderStore((state) => state.resetAll);
+  const reminders = useReminderStore((state) => state.reminders);
 
   const [showScrollDialog, setShowScrollDialog] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
@@ -87,6 +91,21 @@ export default function SettingsPage() {
     } else {
       setNotice('未获得通知权限，可在浏览器地址栏的站点设置里重新开启。');
     }
+  };
+
+  const exportIcs = async () => {
+    await ensureLunar();
+    const content = buildIcs(reminders, todayLocalDate());
+    const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'reminder.ics';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice(`已导出 reminder.ics（${reminders.length} 条提醒）`);
   };
 
   const scrollLabel = SCROLL_OPTIONS.find((option) => option.value === settings.scrollBehavior)?.label ?? '隐藏底栏';
@@ -274,6 +293,13 @@ export default function SettingsPage() {
                 value={settings.reminderMethod}
                 onChange={(value) => void updateSettings({ reminderMethod: value })}
               />
+              {settings.reminderMethod === 'ICS' && (
+                <ActionRow
+                  title="导出 .ics 文件"
+                  description="为所有提醒生成全天事件日历，可导入系统日历"
+                  onClick={() => void exportIcs()}
+                />
+              )}
             </div>
           </div>
         </Group>
