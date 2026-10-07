@@ -6,7 +6,7 @@
  */
 import type { BackupData, ReminderItem, TagItem } from '../types/reminder';
 import type { AppSettings } from './storage';
-import { listImageNames, loadImageBlob, replaceImageBlobs } from './storage';
+import { listImageNames, loadImageBlob, replaceImageBlobs, listFontNames, loadFontBlob, replaceFontBlobs } from './storage';
 import {
   backupFileName,
   collectArchiveImages,
@@ -64,6 +64,16 @@ async function collectImages(reminders: ReminderItem[]): Promise<Record<string, 
   return images;
 }
 
+async function collectFonts(): Promise<Record<string, Uint8Array>> {
+  const fonts: Record<string, Uint8Array> = {};
+  for (const name of await listFontNames()) {
+    const blob = await loadFontBlob(name);
+    if (blob === undefined) continue;
+    fonts[name] = new Uint8Array(await blob.arrayBuffer());
+  }
+  return fonts;
+}
+
 /** 导出：打包为 Blob（encrypt=true 时整包加密）。 */
 export async function exportBackup(
   reminders: ReminderItem[],
@@ -74,7 +84,8 @@ export async function exportBackup(
 ): Promise<ExportResult> {
   const metadata = toBackupData(reminders, tags, settings);
   const images = await collectImages(reminders);
-  const bytes = await encodeArchive({ metadataJson: JSON.stringify(metadata), images }, encrypt);
+  const fonts = await collectFonts();
+  const bytes = await encodeArchive({ metadataJson: JSON.stringify(metadata), images, fonts }, encrypt);
   return {
     blob: new Blob([bytes as BlobPart], { type: 'application/zip' }),
     fileName: backupFileName(now),
@@ -93,6 +104,12 @@ export async function importBackup(bytes: Uint8Array): Promise<ImportResult> {
     blobs[name] = new Blob([data as BlobPart]);
   }
   await replaceImageBlobs(blobs);
+
+  const fontBlobs: Record<string, Blob> = {};
+  for (const [name, data] of Object.entries(content.fonts)) {
+    fontBlobs[name] = new Blob([data as BlobPart]);
+  }
+  await replaceFontBlobs(fontBlobs);
 
   const settings: Partial<AppSettings> = {};
   if (metadata.themeOption !== null && metadata.themeOption !== undefined) settings.themeOption = metadata.themeOption;

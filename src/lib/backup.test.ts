@@ -72,6 +72,18 @@ describe('明文 zip 真往返', () => {
     expect(Array.from(decoded.images['bg.png']!)).toEqual(Array.from(imageBytes));
   });
 
+  it('fonts/ 条目同样原样读写（可选字体不丢）', async () => {
+    const backup = makeBackup({ reminders: [makeItem({ id: 8, title: '字体' })] });
+    const fontBytes = new Uint8Array([0x77, 0x4f, 0x46, 0x32, 9, 8, 7]);
+    const archive = await encodeArchive(
+      { metadataJson: metadataOf(backup), fonts: { 'custom.ttf': fontBytes } },
+      true,
+    );
+    const decoded = await decodeArchive(archive);
+    expect(Array.from(decoded.fonts['custom.ttf']!)).toEqual(Array.from(fontBytes));
+    expect(decoded.images).toEqual({});
+  });
+
   it('parseBackupData 返回深比较一致的 BackupData', async () => {
     const item = makeItem({ id: 3, title: '毕业', date: '2026-06-30' });
     const backup = makeBackup({ reminders: [item] });

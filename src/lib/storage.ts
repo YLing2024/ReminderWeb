@@ -10,6 +10,7 @@ import type { ReminderItem, TagItem } from '../types/reminder';
 
 export const DATA_KEY = 'reminderweb:data';
 export const IMAGE_KEY_PREFIX = 'reminderweb:image:';
+export const FONT_KEY_PREFIX = 'reminderweb:font:';
 
 /** Web 端本地设置（与安卓 Settings 对齐的子集，M2 起使用）。 */
 export interface AppSettings {
@@ -129,5 +130,33 @@ export async function replaceImageBlobs(images: Record<string, Blob>): Promise<v
   }
   for (const [name, blob] of Object.entries(images)) {
     await set(imageKey(name), blob, store);
+  }
+}
+
+export function fontKey(name: string): string {
+  return `${FONT_KEY_PREFIX}${name}`;
+}
+
+export async function listFontNames(): Promise<string[]> {
+  const all = await keys<string>(store);
+  return all
+    .filter((key) => typeof key === 'string' && key.startsWith(FONT_KEY_PREFIX))
+    .map((key) => key.slice(FONT_KEY_PREFIX.length));
+}
+
+export async function loadFontBlob(name: string): Promise<Blob | undefined> {
+  return get<Blob>(fontKey(name), store);
+}
+
+/** 用给定字体集合替换本地字体库：未出现在集合中的旧字体会被删除。 */
+export async function replaceFontBlobs(fonts: Record<string, Blob>): Promise<void> {
+  const existing = await listFontNames();
+  for (const name of existing) {
+    if (!Object.prototype.hasOwnProperty.call(fonts, name)) {
+      await del(fontKey(name), store);
+    }
+  }
+  for (const [name, blob] of Object.entries(fonts)) {
+    await set(fontKey(name), blob, store);
   }
 }
