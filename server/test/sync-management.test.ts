@@ -486,6 +486,26 @@ test('图片往返：恢复含 images/ 的安卓包后，背景图路径保留�
   }
 });
 
+test('M12 §2：服务端上传的备份包 metadata 不含 webDav* 凭据字段', async () => {
+  const fake = createFakeWebDav(() => BASE_CLOCK);
+  const { ts, getEngine } = await startSyncServer(fake);
+  try {
+    const upload = (await (await fetch(`${ts.url}/api/sync/upload`, { method: 'POST' })).json()) as { name: string };
+    const uploaded = fake.files.get(upload.name);
+    assert.ok(uploaded !== undefined);
+    const content = decodeArchive(uploaded.bytes);
+    const metadata = JSON.parse(content.metadataJson) as Record<string, unknown>;
+    for (const key of ['webDavServer', 'webDavUsername', 'webDavPassword', 'webDavPath']) {
+      assert.equal(key in metadata, false, `${key} 不应出现在服务端上传的包中`);
+    }
+    // 环境变量里的服务端口令也不得出现在包里。
+    assert.equal(content.metadataJson.includes('topsecret'), false);
+  } finally {
+    getEngine()?.stop();
+    await ts.close();
+  }
+});
+
 test('POST /api/sync/restore：名字非法 400 / 不存在 404 / 坏包 400', async () => {
   const fake = createFakeWebDav(() => BASE_CLOCK);
   fake.files.set('reminder-backup-20260103-120000.zip', {

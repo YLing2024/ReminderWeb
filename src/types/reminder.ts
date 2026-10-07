@@ -101,10 +101,17 @@ export interface BackupData {
   defaultPage: 'COUNTDOWN' | 'COUNTUP' | 'BIRTHDAY' | null;
   viewMode: string | null;
   backupReminderEnabled: boolean | null;
-  webDavServer: string | null;
-  webDavUsername: string | null;
-  webDavPassword: string | null;
-  webDavPath: string | null;
+  /**
+   * 安卓备份里的 WebDAV 凭据字段（M12 §2）。
+   *
+   * 本应用**导出/上传时一律不写**这四个字段（避免把进入 WebDAV 服务器的口令随备份文件
+   * 一起上传到服务器）；但**导入时仍兼容**：读到安卓备份里的这四个字段时接受并用于填充
+   * 本机 WebDAV 配置。因此这里声明为可选。
+   */
+  webDavServer?: string | null;
+  webDavUsername?: string | null;
+  webDavPassword?: string | null;
+  webDavPath?: string | null;
   dynamicColorEnabled: boolean | null;
   themeColorPalette: 'BLUE' | 'GREEN' | 'YELLOW' | 'ORANGE' | 'PURPLE' | 'PINK' | 'CYAN' | 'MONOCHROME' | null;
   customColorSeed: number | null;

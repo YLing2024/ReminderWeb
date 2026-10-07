@@ -8,7 +8,7 @@
  *
  * WebDAV 云备份凭据不单独建 key：作为 `AppSettings` 的 `webdavServer /
  * webdavUsername / webdavPassword` 字段，随结构化数据存在 `reminderweb:data` 这一键下。
- * 密码只进不出：不写日志、不进导出备份（`toBackupData` 一律置空 webDav 字段）。
+ * 密码只进不出：不写日志、不进导出备份（`toBackupData` 不写 webDav 字段，M12 §2）。
  *
  * 应用锁密码同样只存本地：`AppSettings.appLockPasswordHash` 为 v2 PBKDF2 凭据对象
  *   `{ v: 2, algo: 'PBKDF2-SHA-256', salt: <base64>, iterations: 210000, hash: <base64> }`；

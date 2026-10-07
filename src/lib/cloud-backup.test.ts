@@ -185,13 +185,32 @@ describe('WebDAV 云备份集成（内存服务端）', () => {
     ).rejects.toBeInstanceOf(BackupError);
   });
 
-  it('导出的备份包不含 WebDAV 凭据', async () => {
-    const settings = { ...BASE_SETTINGS, webdavServer: 'https://dav.example.com/dav/', webdavPassword: 'topsecret' };
+  it('导出与上传的备份包不含 WebDAV 凭据字段（键都不出现）', async () => {
+    const settings = {
+      ...BASE_SETTINGS,
+      webdavServer: 'https://dav.example.com/dav/',
+      webdavUsername: 'davuser',
+      webdavPassword: 'topsecret',
+    };
     const result = await exportBackup([], [], settings, false, new Date(2026, 0, 1));
     const content = await decodeArchive(new Uint8Array(await result.blob.arrayBuffer()));
     const metadata = JSON.parse(content.metadataJson) as Record<string, unknown>;
-    expect(metadata['webDavPassword']).toBeNull();
-    expect(metadata['webDavServer']).toBeNull();
+    for (const key of ['webDavServer', 'webDavUsername', 'webDavPassword', 'webDavPath']) {
+      expect(key in metadata).toBe(false);
+    }
     expect(JSON.stringify(metadata)).not.toContain('topsecret');
+
+    // 上传到 WebDAV 的包与本地导出一致，同样不含凭据字段。
+    const server = createMemoryWebDavServer();
+    const outcome = await uploadCurrentBackup(
+      { reminders: [], tags: [], settings },
+      { fetchImpl: server.fetchImpl, now: () => new Date(2026, 0, 1) },
+    );
+    const uploaded = server.files.get(outcome.fileName)!.bytes;
+    const uploadedMetadata = JSON.parse((await decodeArchive(uploaded)).metadataJson) as Record<string, unknown>;
+    for (const key of ['webDavServer', 'webDavUsername', 'webDavPassword', 'webDavPath']) {
+      expect(key in uploadedMetadata).toBe(false);
+    }
+    expect(JSON.stringify(uploadedMetadata)).not.toContain('topsecret');
   });
 });

@@ -158,7 +158,12 @@ export function parseBackupMetadata(metadataJson: string, updatedAt: number): Pa
   return { reminders, tags, settings, rejected };
 }
 
-/** 由服务端当前状态构造 BackupData（未内联图片，条目不含同步元数据）。 */
+/**
+ * 由服务端当前状态构造 BackupData（未内联图片，条目不含同步元数据）。
+ *
+ * M12 §2：**绝不写入** `webDavServer / webDavUsername / webDavPassword / webDavPath`。
+ * 服务端设置里本就没有 WebDAV 凭据（凭据只从环境变量读），这里显式保证上传的包不含这四个字段。
+ */
 export function buildBackupData(server: ServerData): BackupData {
   const settings = server.settings.value;
   const pick = (key: string): unknown => (key in settings ? settings[key] : null);
@@ -171,10 +176,6 @@ export function buildBackupData(server: ServerData): BackupData {
     defaultPage: pick('defaultPage') as BackupData['defaultPage'],
     viewMode: (pick('viewMode') as string | null) ?? null,
     backupReminderEnabled: pick('backupReminderEnabled') as boolean | null,
-    webDavServer: null,
-    webDavUsername: null,
-    webDavPassword: null,
-    webDavPath: null,
     dynamicColorEnabled: pick('dynamicColorEnabled') as boolean | null,
     themeColorPalette: pick('themeColorPalette') as BackupData['themeColorPalette'],
     customColorSeed: pick('customColorSeed') as number | null,

@@ -138,5 +138,8 @@ test('buildBackupMetadata：条目不含 updatedAt，设置字段回填', () => 
   assert.equal((data.reminders as Array<Record<string, unknown>>)[0]?.updatedAt, undefined);
   assert.equal(data.themeOption, 'LIGHT');
   assert.equal(data.pureBlackEnabled, true);
-  assert.equal(data.webDavPassword, null);
+  // M12 §2：服务端上传的包不得包含 WebDAV 凭据字段（键都不出现）。
+  for (const key of ['webDavServer', 'webDavUsername', 'webDavPassword', 'webDavPath']) {
+    assert.equal(key in data, false, `${key} 不应出现在服务端备份 metadata 中`);
+  }
 });

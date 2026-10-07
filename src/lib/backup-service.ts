@@ -31,7 +31,13 @@ export interface ImportResult {
   imageCount: number;
 }
 
-/** 由当前应用状态构造备份结构（未内联图片，图片随 zip 走）。 */
+/**
+ * 由当前应用状态构造备份结构（未内联图片，图片随 zip 走）。
+ *
+ * M12 §2：**绝不写入** `webDavServer / webDavUsername / webDavPassword / webDavPath`——
+ * 这四个字段是进入 WebDAV 服务器的凭据，不该随备份包上传到那台服务器。其余字段与安卓格式
+ * 保持一致。导入兼容逻辑见 `settingsFromBackup`。
+ */
 export function toBackupData(reminders: ReminderItem[], tags: TagItem[], settings: AppSettings): BackupData {
   return {
     reminders: reminders.map((item) => stripSyncMeta(item)) as ReminderItem[],
@@ -42,10 +48,6 @@ export function toBackupData(reminders: ReminderItem[], tags: TagItem[], setting
     defaultPage: settings.defaultPage,
     viewMode: settings.viewMode,
     backupReminderEnabled: settings.backupReminderEnabled,
-    webDavServer: null,
-    webDavUsername: null,
-    webDavPassword: null,
-    webDavPath: null,
     dynamicColorEnabled: settings.dynamicColorEnabled,
     themeColorPalette: settings.themeColorPalette as BackupData['themeColorPalette'],
     customColorSeed: settings.customColorSeed,
@@ -95,6 +97,19 @@ export async function exportBackup(
   };
 }
 
+/**
+ * 把安卓备份的 `webDavServer` + `webDavPath` 合并成本机用的完整地址（M12 §2）。
+ * `webDavServer` 可能是主机地址、`webDavPath` 是目录路径；避免重复拼接已有目录。
+ */
+function mergeWebDavPath(server: string, path: string | null | undefined): string {
+  const trimmedPath = typeof path === 'string' ? path.trim() : '';
+  if (trimmedPath === '') return server;
+  const base = server.replace(/\/+$/, '');
+  const suffix = trimmedPath.replace(/^\/+/, '').replace(/\/+$/, '');
+  if (suffix === '' || base.endsWith(`/${suffix}`) || base === suffix) return server;
+  return `${base}/${suffix}/`;
+}
+
 /** 把归档 metadata 里的可空设置映射为本地设置（纯函数，缺省字段不覆盖）。 */
 export function settingsFromBackup(metadata: BackupData): Partial<AppSettings> {
   const settings: Partial<AppSettings> = {};
@@ -109,6 +124,13 @@ export function settingsFromBackup(metadata: BackupData): Partial<AppSettings> {
   if (metadata.customColorSeed !== null && metadata.customColorSeed !== undefined) settings.customColorSeed = metadata.customColorSeed;
   if (metadata.scrollBehavior !== null && metadata.scrollBehavior !== undefined) settings.scrollBehavior = metadata.scrollBehavior;
   if (metadata.homeCategoryEnabled !== null && metadata.homeCategoryEnabled !== undefined) settings.homeCategoryEnabled = metadata.homeCategoryEnabled;
+  // M12 §2：兼容安卓备份里的 WebDAV 凭据字段，读入并用于填充本机配置；
+  // 导出/上传侧不再写这四个字段，因此不会把口令二次外泄。
+  if (typeof metadata.webDavServer === 'string' && metadata.webDavServer.trim() !== '') {
+    settings.webdavServer = mergeWebDavPath(metadata.webDavServer.trim(), metadata.webDavPath);
+  }
+  if (typeof metadata.webDavUsername === 'string') settings.webdavUsername = metadata.webDavUsername;
+  if (typeof metadata.webDavPassword === 'string') settings.webdavPassword = metadata.webDavPassword;
   return settings;
 }
 
