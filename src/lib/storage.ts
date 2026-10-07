@@ -18,6 +18,7 @@
 import { createStore, del, get, keys, set, clear } from 'idb-keyval';
 import type { ReminderItem, TagItem } from '../types/reminder';
 import type { StoredAppLock } from './app-lock';
+import { isAppLockCredential } from './app-lock';
 import { normalizeReminderList, normalizeTagList } from './normalize';
 
 export const DATA_KEY = 'reminderweb:data';
@@ -117,14 +118,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * 兼容旧版设置：历史上应用锁字段名为 `appLockPinHash`，新版为 `appLockPasswordHash`。
  * 旧值（v1 十六进制摘要）原样搬运，保证老用户仍能用自己的旧密码解锁。
+ * 两字段冲突时：新字段若为结构完整的 v2 凭据则保留；否则回退到旧摘要（以可校验者为准）。
  * 纯函数，便于单测。
  */
 export function migrateAppLockSettings(rawSettings: Record<string, unknown>): Record<string, unknown> {
   const next = { ...rawSettings };
-  if (next.appLockPasswordHash === undefined && next.appLockPinHash !== undefined) {
-    next.appLockPasswordHash = next.appLockPinHash;
+  const legacy = next.appLockPinHash;
+  if (legacy !== undefined) {
+    if (next.appLockPasswordHash === undefined || !isAppLockCredential(next.appLockPasswordHash)) {
+      next.appLockPasswordHash = legacy;
+    }
+    delete next.appLockPinHash;
   }
-  delete next.appLockPinHash;
   return next;
 }
 

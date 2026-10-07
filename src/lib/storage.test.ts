@@ -38,4 +38,14 @@ describe('migrateAppLockSettings（旧 PIN 字段兼容）', () => {
     expect('appLockPinHash' in migrated).toBe(false);
     expect(migrated.themeOption).toBe('DARK');
   });
+
+  it('两字段冲突且新字段无法识别时，回退到旧的可校验摘要', () => {
+    const legacy = 'c'.repeat(64);
+    const migrated = migrateAppLockSettings({
+      appLockPasswordHash: { broken: true },
+      appLockPinHash: legacy,
+    });
+    expect(migrated.appLockPasswordHash).toBe(legacy);
+    expect('appLockPinHash' in migrated).toBe(false);
+  });
 });
