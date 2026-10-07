@@ -75,7 +75,7 @@ export async function handleLogin(ctx: RouteContext): Promise<RouteResponse> {
   return {
     status: 200,
     body: { username: credentials.username },
-    cookies: [buildSessionCookie(session.token, Math.floor(ttlMs / 1000))],
+    cookies: [buildSessionCookie(session.token, Math.floor(ttlMs / 1000), ctx.config.cookieSameSite)],
   };
 }
 
@@ -84,7 +84,7 @@ export function handleLogout(ctx: RouteContext): RouteResponse {
   const cookies = parseCookies(Array.isArray(cookieHeader) ? cookieHeader[0] : cookieHeader);
   const token = cookies[SESSION_COOKIE];
   if (token !== undefined && token !== '') deleteSession(ctx.db, token);
-  return { status: 200, body: { ok: true }, cookies: [buildClearCookie()] };
+  return { status: 200, body: { ok: true }, cookies: [buildClearCookie(ctx.config.cookieSameSite)] };
 }
 
 export function handleMe(ctx: RouteContext): RouteResponse {

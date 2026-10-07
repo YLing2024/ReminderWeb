@@ -101,3 +101,24 @@ test('WebDAV：非法参数抛错', () => {
   assert.throws(() => loadConfig({ WEBDAV_TIMEOUT_SECONDS: '9999' }), ConfigError);
   assert.throws(() => loadConfig({ WEBDAV_ENCRYPT: 'maybe' }), ConfigError);
 });
+
+test('CORS：默认为空、逗号白名单去重并规范化为 origin', () => {
+  assert.deepEqual(loadConfig({}).allowedOrigins, []);
+  const config = loadConfig({
+    ALLOWED_ORIGINS: 'https://app.example.com/, http://127.0.0.1:5173, https://app.example.com',
+  });
+  assert.deepEqual(config.allowedOrigins, ['https://app.example.com', 'http://127.0.0.1:5173']);
+});
+
+test('CORS：拒绝 * 与非法来源', () => {
+  assert.throws(() => loadConfig({ ALLOWED_ORIGINS: '*' }), /通配/);
+  assert.throws(() => loadConfig({ ALLOWED_ORIGINS: 'not a url' }), ConfigError);
+  assert.throws(() => loadConfig({ ALLOWED_ORIGINS: 'https://app.example.com/path' }), /来源/);
+});
+
+test('COOKIE_SAMESITE：默认 lax，仅接受 lax / none', () => {
+  assert.equal(loadConfig({}).cookieSameSite, 'lax');
+  assert.equal(loadConfig({ COOKIE_SAMESITE: 'none' }).cookieSameSite, 'none');
+  assert.equal(loadConfig({ COOKIE_SAMESITE: 'Lax' }).cookieSameSite, 'lax');
+  assert.throws(() => loadConfig({ COOKIE_SAMESITE: 'strict' }), ConfigError);
+});

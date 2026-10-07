@@ -29,6 +29,28 @@ import type { SyncEngine } from './sync.ts';
 /** 请求体大小上限：2 MiB（需求 §6.2）。 */
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
+/** 跨域预检允许的方法与头（前后端分离部署，M10 §2）。 */
+const CORS_ALLOW_METHODS = 'GET, PUT, POST, DELETE, OPTIONS';
+const CORS_ALLOW_HEADERS = 'Content-Type';
+
+/**
+ * 按白名单写 CORS 头（M10 §2）。
+ * - 命中白名单：回精确来源 + `Allow-Credentials: true`（绝不使用 `*`）；
+ * - 未命中：不回任何 CORS 头（浏览器自行拒绝）；
+ * - 只要配置了白名单就声明 `Vary: Origin`，避免共享缓存串源。
+ * 返回该来源是否命中白名单。
+ */
+function applyCors(req: IncomingMessage, res: ServerResponse, config: Config): boolean {
+  if (config.allowedOrigins.length === 0) return false;
+  res.setHeader('Vary', 'Origin');
+  const rawOrigin = req.headers.origin;
+  const origin = Array.isArray(rawOrigin) ? rawOrigin[0] : rawOrigin;
+  if (typeof origin !== 'string' || origin === '' || !config.allowedOrigins.includes(origin)) return false;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  return true;
+}
+
 /** 统一业务错误：`status` + 稳定错误码。 */
 export class HttpError extends Error {
   readonly status: number;
@@ -241,6 +263,20 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, options:
   const rawUrl = req.url ?? '/';
   const queryIndex = rawUrl.indexOf('?');
   const path = queryIndex >= 0 ? rawUrl.slice(0, queryIndex) : rawUrl;
+
+  const corsAllowed = applyCors(req, res, options.config);
+
+  // 预检：只对 /api/* 处理；白名单命中才回允许的方法与头，否则不回任何 CORS 头。
+  if (method === 'OPTIONS' && path.startsWith('/api/')) {
+    if (corsAllowed) {
+      res.setHeader('Access-Control-Allow-Methods', CORS_ALLOW_METHODS);
+      res.setHeader('Access-Control-Allow-Headers', CORS_ALLOW_HEADERS);
+      res.setHeader('Access-Control-Max-Age', '600');
+    }
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
 
   if (!path.startsWith('/api/')) {
     if (options.config.serveStatic) serveStatic(res, options.config, path);

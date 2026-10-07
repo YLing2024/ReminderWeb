@@ -8,6 +8,8 @@ import { resolve } from 'node:path';
 
 export type AuthMode = 'builtin' | 'sso' | 'none';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+/** 会话 Cookie 的 SameSite 策略；`none` 用于前后端分离的跨站部署（必须配合 Secure）。 */
+export type CookieSameSite = 'lax' | 'none';
 
 export interface Config {
   host: string;
@@ -39,6 +41,10 @@ export interface Config {
   webdavKeep: number;
   /** 单次 HTTP 请求超时（秒）。 */
   webdavTimeoutSeconds: number;
+  /** 跨域白名单（精确来源，逗号分隔）；空数组 = 不启用 CORS。绝不使用 `*`。 */
+  allowedOrigins: string[];
+  /** 会话 Cookie 的 SameSite 策略。 */
+  cookieSameSite: CookieSameSite;
 }
 
 /** 配置错误：`message` 可直接展示给运维。 */
@@ -51,6 +57,7 @@ export class ConfigError extends Error {
 
 const AUTH_MODES: readonly AuthMode[] = ['builtin', 'sso', 'none'];
 const LOG_LEVELS: readonly LogLevel[] = ['debug', 'info', 'warn', 'error'];
+const COOKIE_SAMESITE_VALUES: readonly CookieSameSite[] = ['lax', 'none'];
 
 /** 是否为本机回环地址（IPv4 / IPv6 / localhost）。 */
 export function isLoopbackHost(host: string): boolean {
@@ -75,6 +82,51 @@ function parseBoolean(name: string, raw: string | undefined, fallback: boolean):
   if (['1', 'true', 'yes', 'on'].includes(value)) return true;
   if (['0', 'false', 'no', 'off'].includes(value)) return false;
   throw new ConfigError(`环境变量 ${name} 必须是布尔值（1/0、true/false），当前为「${raw}」`);
+}
+
+/**
+ * 解析跨域白名单：逗号分隔的精确来源（scheme://host[:port]）。
+ * 留空 = 不启用跨域；拒绝 `*`（带 cookie 时浏览器不允许通配），非法来源直接报错。
+ * 返回规范化后的 `origin`，去重且保持顺序。
+ */
+export function parseAllowedOrigins(raw: string | undefined): string[] {
+  if (raw === undefined || raw.trim() === '') return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(',')) {
+    const entry = part.trim();
+    if (entry === '') continue;
+    if (entry === '*') {
+      throw new ConfigError('环境变量 ALLOWED_ORIGINS 不能使用 * 通配（跨域携带 Cookie 时必须列出精确来源）。');
+    }
+    let url: URL;
+    try {
+      url = new URL(entry);
+    } catch {
+      throw new ConfigError(`环境变量 ALLOWED_ORIGINS 的「${entry}」不是合法来源（需形如 https://app.example.com）。`);
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new ConfigError(`环境变量 ALLOWED_ORIGINS 的「${entry}」只支持 http/https 来源。`);
+    }
+    if (url.pathname !== '/' || url.search !== '' || url.hash !== '') {
+      throw new ConfigError(`环境变量 ALLOWED_ORIGINS 的「${entry}」只能是来源（scheme://host[:port]），不能带路径或查询）。`);
+    }
+    const origin = url.origin;
+    if (!seen.has(origin)) {
+      seen.add(origin);
+      out.push(origin);
+    }
+  }
+  return out;
+}
+
+function parseCookieSameSite(raw: string | undefined): CookieSameSite {
+  if (raw === undefined || raw.trim() === '') return 'lax';
+  const value = raw.trim().toLowerCase();
+  if (!(COOKIE_SAMESITE_VALUES as readonly string[]).includes(value)) {
+    throw new ConfigError(`环境变量 COOKIE_SAMESITE 只能是 lax / none，当前为「${raw}」`);
+  }
+  return value as CookieSameSite;
 }
 
 /** 解析并校验环境变量；非法配置抛出 `ConfigError`。 */
@@ -119,6 +171,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const webdavKeep = parseInteger('WEBDAV_KEEP', env.WEBDAV_KEEP, 10, 1, 1000);
   const webdavTimeoutSeconds = parseInteger('WEBDAV_TIMEOUT_SECONDS', env.WEBDAV_TIMEOUT_SECONDS, 20, 1, 600);
 
+  // 前后端分离部署（M10 §2）：CORS 白名单与会话 Cookie 策略。
+  const allowedOrigins = parseAllowedOrigins(env.ALLOWED_ORIGINS);
+  const cookieSameSite = parseCookieSameSite(env.COOKIE_SAMESITE);
+
   return {
     host,
     port,
@@ -142,6 +198,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     webdavEncrypt,
     webdavKeep,
     webdavTimeoutSeconds,
+    allowedOrigins,
+    cookieSameSite,
   };
 }
 
@@ -153,5 +211,6 @@ export function describeConfig(config: Config): string {
     `数据目录 ${config.dataDir}`,
     `静态文件 ${config.serveStatic ? config.staticDir : '关闭'}`,
     `WebDAV ${config.webdavEnabled ? `同步到 ${config.webdavUrl}` : '关闭'}`,
+    `CORS ${config.allowedOrigins.length > 0 ? config.allowedOrigins.join(',') : '关闭'}`,
   ].join(' | ');
 }

@@ -45,7 +45,10 @@ declare class URL {
   protocol: string;
   username: string;
   password: string;
+  host: string;
+  origin: string;
   hash: string;
+  search: string;
   pathname: string;
   href: string;
 }

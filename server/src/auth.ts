@@ -122,12 +122,12 @@ export function deleteSession(db: DatabaseSync, token: string): void {
 
 /* --------------------------- Cookie --------------------------- */
 
-export function buildSessionCookie(token: string, ttlSeconds: number): string {
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${ttlSeconds}`;
+export function buildSessionCookie(token: string, ttlSeconds: number, sameSite: 'lax' | 'none' = 'lax'): string {
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=${sameSite === 'none' ? 'None' : 'Lax'}; Max-Age=${ttlSeconds}`;
 }
 
-export function buildClearCookie(): string {
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+export function buildClearCookie(sameSite: 'lax' | 'none' = 'lax'): string {
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=${sameSite === 'none' ? 'None' : 'Lax'}; Max-Age=0`;
 }
 
 /** 解析 Cookie 头，返回键值表。 */
