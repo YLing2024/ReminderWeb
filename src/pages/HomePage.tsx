@@ -8,6 +8,8 @@ import { GridIcon, ListIcon, PinIcon, PlusIcon, SearchIcon, SettingsIcon, EditIc
 import { buildReminderSections } from '../lib/sort';
 import { reminderDisplayInfo } from '../lib/display';
 import { todayLocalDate } from '../lib/local-date';
+import { ensureLunar } from '../lib/lunar';
+import { useLunarReady } from '../lib/useLunarReady';
 import { useReminderStore } from '../store/useReminderStore';
 import type { ReminderItem } from '../types/reminder';
 import styles from './HomePage.module.css';
@@ -91,7 +93,18 @@ export default function HomePage() {
     return reminders.filter((item) => item.type === type);
   }, [reminders, category, categoryEnabled]);
 
-  const sections = useMemo(() => buildReminderSections(visibleItems, tags, today), [visibleItems, tags, today]);
+  // 首屏不静态引入农历表：仅当可见条目里确有农历事件时才按需载入。
+  const needsLunar = useMemo(() => visibleItems.some((item) => item.isLunar), [visibleItems]);
+  const lunarReady = useLunarReady();
+  useEffect(() => {
+    if (needsLunar) void ensureLunar();
+  }, [needsLunar]);
+  const lunarPending = needsLunar && !lunarReady;
+
+  const sections = useMemo(
+    () => (lunarPending ? [] : buildReminderSections(visibleItems, tags, today)),
+    [visibleItems, tags, today, lunarPending],
+  );
 
   const tagColorByName = useMemo(() => {
     const map = new Map<string, string>();
@@ -177,9 +190,9 @@ export default function HomePage() {
           </div>
         </header>
 
-        {!loaded && <p className={styles.status}>正在载入…</p>}
+        {(!loaded || lunarPending) && <p className={styles.status}>正在载入…</p>}
 
-        {loaded && visibleItems.length === 0 && (
+        {loaded && !lunarPending && visibleItems.length === 0 && (
           <div className={styles.empty}>
             <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
               <rect x="24" y="20" width="72" height="80" rx="12" fill="var(--app-tint-strong)" />
@@ -193,7 +206,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {loaded && visibleItems.length > 0 && (
+        {loaded && !lunarPending && visibleItems.length > 0 && (
           <div className={styles.sections}>
             {sections.map((section) => {
               const variant = section.key === 'pinned' ? 'pinned' : section.tagColorHex === null && section.title === '无标签' ? 'uncategorized' : 'tag';

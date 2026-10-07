@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLockGate } from './components/AppLockGate';
+import { LunarGate } from './components/LunarGate';
 import { ThemeController } from './components/ThemeController';
 import HomePage from './pages/HomePage';
 import { useReminderStore } from './store/useReminderStore';
@@ -27,12 +28,12 @@ export default function App() {
       <AppLockGate>
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/reminder/new" element={<EditPage />} />
-          <Route path="/reminder/:id/edit" element={<EditPage />} />
-          <Route path="/reminder/:id" element={<DetailPage />} />
-          <Route path="/search" element={<SearchPage />} />
+          <Route path="/reminder/new" element={<LunarGate><EditPage /></LunarGate>} />
+          <Route path="/reminder/:id/edit" element={<LunarGate><EditPage /></LunarGate>} />
+          <Route path="/reminder/:id" element={<LunarGate><DetailPage /></LunarGate>} />
+          <Route path="/search" element={<LunarGate><SearchPage /></LunarGate>} />
           <Route path="/tags" element={<TagPage />} />
-          <Route path="/calculator" element={<DateCalculatorPage />} />
+          <Route path="/calculator" element={<LunarGate><DateCalculatorPage /></LunarGate>} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
