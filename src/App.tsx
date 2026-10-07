@@ -3,10 +3,13 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppLockGate } from './components/AppLockGate';
 import { ErrorBoundary, UnhandledErrorNotice } from './components/ErrorBoundary';
 import { LunarGate } from './components/LunarGate';
+import { ServerLoginDialog } from './components/ServerLoginDialog';
+import { ServerStatusBar } from './components/ServerStatusBar';
 import { ThemeController } from './components/ThemeController';
 import HomePage from './pages/HomePage';
 import { useCloudAutoBackup } from './lib/cloud-auto';
 import { useNotificationScheduler } from './lib/notifications';
+import { useServerSync } from './lib/server-sync';
 import { useReminderStore } from './store/useReminderStore';
 
 const EditPage = lazy(() => import('./pages/EditPage'));
@@ -29,6 +32,7 @@ export default function App() {
 
   useNotificationScheduler();
   useCloudAutoBackup();
+  useServerSync();
 
   return (
     <>
@@ -36,6 +40,7 @@ export default function App() {
         <Suspense fallback={<div style={{ padding: 24, textAlign: 'center' }}>正在载入…</div>}>
           <ThemeController />
           <AppLockGate>
+            <ServerStatusBar />
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/reminder/new" element={<LunarGate><EditPage /></LunarGate>} />
@@ -50,6 +55,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </AppLockGate>
+          <ServerLoginDialog />
         </Suspense>
       </ErrorBoundary>
       <UnhandledErrorNotice />

@@ -11,11 +11,13 @@ import {
   HomeIcon,
   LockIcon,
   PaletteIcon,
+  ServerIcon,
   StorageIcon,
   TagIcon,
 } from '../components/icons';
 import { ConfirmDialog, IconButton, Toggle } from '../components/ui';
 import { PasswordField } from '../components/PasswordField';
+import { ServerSettings } from '../components/ServerSettings';
 import { WebDavSettings } from '../components/WebDavSettings';
 import { SEED_PALETTES } from '../lib/theme';
 import { changeLockPassword, clearLockPassword, setupLockPassword } from '../lib/app-lock';
@@ -363,6 +365,10 @@ export default function SettingsPage() {
 
         <Group title="WebDAV 云备份" icon={<CloudIcon width={18} height={18} />}>
           <WebDavSettings onNotice={setNotice} />
+        </Group>
+
+        <Group title="服务器" icon={<ServerIcon width={18} height={18} />}>
+          <ServerSettings onNotice={setNotice} />
         </Group>
 
         <Group title="安全" icon={<LockIcon width={18} height={18} />}>

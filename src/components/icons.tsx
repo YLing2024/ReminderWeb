@@ -260,6 +260,16 @@ export function CloudIcon(props: IconProps) {
   );
 }
 
+export function ServerIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="4" width="16" height="7" rx="2" />
+      <rect x="4" y="13" width="16" height="7" rx="2" />
+      <path d="M8 7.5h.01M8 16.5h.01" />
+    </Svg>
+  );
+}
+
 export function CalculatorIcon(props: IconProps) {  return (
     <Svg {...props}>
       <rect x="5" y="3" width="14" height="18" rx="2" />
