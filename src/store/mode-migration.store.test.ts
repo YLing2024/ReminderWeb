@@ -10,6 +10,7 @@ import { makeItem } from '../test/factories';
 const h = vi.hoisted(() => ({
   imageStore: new Map<string, Blob>(),
   full: { value: null as unknown },
+  fullError: { value: null as Error | null },
   replaceResult: { value: null as unknown },
   replaceError: { value: null as Error | null },
   payload: { value: null as unknown },
@@ -48,7 +49,10 @@ vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
   return {
     ...actual,
-    fetchFullData: async () => h.full.value,
+    fetchFullData: async () => {
+      if (h.fullError.value !== null) throw h.fullError.value;
+      return h.full.value;
+    },
     replaceData: async (payload: unknown) => {
       h.payload.value = payload;
       if (h.replaceError.value !== null) throw h.replaceError.value;
@@ -69,6 +73,7 @@ import { useReminderStore } from './useReminderStore';
 function resetStore(): void {
   h.imageStore.clear();
   h.full.value = null;
+  h.fullError.value = null;
   h.replaceResult.value = null;
   h.replaceError.value = null;
   h.payload.value = null;
@@ -115,6 +120,15 @@ describe('migrateToClient：后端全量覆盖本机', () => {
     expect(outcome.direction).toBe('server-to-client');
     expect(outcome.counts).toEqual({ reminders: 1, tags: 1, images: 1 });
     expect(outcome.verification.ok).toBe(true);
+  });
+
+  it('后端读取失败时抛错且保持服务器模式与原数据', async () => {
+    useReminderStore.setState({ mode: 'server', reminders: [{ ...REMINDER, title: '保留' }] });
+    h.fullError.value = new Error('读取服务器数据失败');
+
+    await expect(useReminderStore.getState().migrateToClient()).rejects.toThrow('读取服务器数据失败');
+    expect(useReminderStore.getState().mode).toBe('server');
+    expect(useReminderStore.getState().reminders[0]!.title).toBe('保留');
   });
 });
 

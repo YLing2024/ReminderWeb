@@ -42,9 +42,9 @@ export const MAX_REPLACE_BODY_BYTES = 32 * 1024 * 1024;
 /** WebDAV 转发请求体上限：64 MiB（备份包可能较大）。 */
 export const MAX_RELAY_BODY_BYTES = 64 * 1024 * 1024;
 
-/** 跨域预检允许的方法与头（前后端分离部署，M10 §2）。 */
+/** 跨域预检允许的方法与头（前后端分离部署，M10 §2 / M11 §3.1）。 */
 const CORS_ALLOW_METHODS = 'GET, PUT, POST, DELETE, OPTIONS';
-const CORS_ALLOW_HEADERS = 'Content-Type';
+const CORS_ALLOW_HEADERS = 'Content-Type, Depth, If-Match, X-Dav-Url, X-Dav-User, X-Dav-Password';
 
 /**
  * 按白名单写 CORS 头（M10 §2）。
