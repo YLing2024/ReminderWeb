@@ -16,6 +16,7 @@ import {
   TagIcon,
 } from '../components/icons';
 import { ConfirmDialog, IconButton, Toggle } from '../components/ui';
+import { AuthWarningBanner } from '../components/AuthWarningBanner';
 import { PasswordField } from '../components/PasswordField';
 import { ModeSettings } from '../components/ModeSettings';
 import { ServerSettings } from '../components/ServerSettings';
@@ -63,7 +64,9 @@ export default function SettingsPage() {
   const updateSettings = useReminderStore((state) => state.updateSettings);
   const resetAll = useReminderStore((state) => state.resetAll);
   const reminders = useReminderStore((state) => state.reminders);
+  const authWarning = useReminderStore((state) => state.authWarning);
 
+  const [warningDismissed, setWarningDismissed] = useState(false);
   const [showScrollDialog, setShowScrollDialog] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showSetupLock, setShowSetupLock] = useState(false);
@@ -127,6 +130,10 @@ export default function SettingsPage() {
       </header>
 
       <div className={styles.content}>
+        {authWarning && !warningDismissed && (
+          <AuthWarningBanner onDismiss={() => setWarningDismissed(true)} />
+        )}
+
         {notice !== null && (
           <div className={styles.notice} role="status">
             <span>{notice}</span>

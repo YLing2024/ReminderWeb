@@ -34,11 +34,25 @@ function abortingFetch(): typeof fetch {
 }
 
 describe('probeHealth 本地模式回落', () => {
-  it('200 时返回健康信息', async () => {
+  it('200 时返回健康信息（含默认口令告警标记）', async () => {
+    const deps: ApiDeps = {
+      fetchImpl: (async () =>
+        jsonResponse({ ok: true, revision: 3, authMode: 'builtin', authWarning: true })) as unknown as typeof fetch,
+    };
+    await expect(probeHealth(deps)).resolves.toEqual({
+      ok: true,
+      revision: 3,
+      authMode: 'builtin',
+      authWarning: true,
+    });
+  });
+
+  it('缺 authWarning 时回落 false', async () => {
     const deps: ApiDeps = {
       fetchImpl: (async () => jsonResponse({ ok: true, revision: 3, authMode: 'builtin' })) as unknown as typeof fetch,
     };
-    await expect(probeHealth(deps)).resolves.toEqual({ ok: true, revision: 3, authMode: 'builtin' });
+    const info = await probeHealth(deps);
+    expect(info?.authWarning).toBe(false);
   });
 
   it('网络错误时返回 null，不抛出', async () => {

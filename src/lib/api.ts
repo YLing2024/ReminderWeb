@@ -75,6 +75,8 @@ export interface HealthInfo {
   ok: boolean;
   revision: number;
   authMode: AuthMode;
+  /** M12 §3.2：服务器仍在使用默认/弱口令时为 true（设置页显示提醒条）。 */
+  authWarning: boolean;
 }
 
 export interface VersionInfo {
@@ -286,7 +288,7 @@ export async function probeHealth(deps: ApiDeps = {}): Promise<HealthInfo | null
     const info = await request<HealthInfo>('GET', '/api/health', undefined, deps);
     if (info !== null && typeof info === 'object' && info.ok === true) {
       const authMode: AuthMode = info.authMode === 'sso' || info.authMode === 'none' ? info.authMode : 'builtin';
-      return { ok: true, revision: Number(info.revision) || 0, authMode };
+      return { ok: true, revision: Number(info.revision) || 0, authMode, authWarning: info.authWarning === true };
     }
     return null;
   } catch {

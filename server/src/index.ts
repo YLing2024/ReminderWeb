@@ -5,7 +5,7 @@
  */
 import type { Server } from 'node:http';
 import { createRateLimiter, ensureInitialUser } from './auth.ts';
-import { describeConfig, loadConfig, type Config } from './config.ts';
+import { describeConfig, isWeakAuthPassword, loadConfig, type Config } from './config.ts';
 import { openDatabase } from './db.ts';
 import { createAppServer } from './http.ts';
 import { createLogger } from './log.ts';
@@ -32,6 +32,12 @@ function boot(): void {
       console.log(`    ${result.generatedPassword}`);
       console.log('该口令只显示这一次，之后不会再次打印。');
       console.log('='.repeat(64));
+    }
+    if (isWeakAuthPassword(config)) {
+      console.warn('='.repeat(64));
+      console.warn('警告：当前使用的是默认口令或过短口令（长度 < 8），存在被登录的风险。');
+      console.warn(`请尽快修改环境变量 AUTH_PASSWORD（用户 ${config.authUser}），或在登录后于设置页修改口令。`);
+      console.warn('='.repeat(64));
     }
   } else if (config.authMode === 'none') {
     console.warn('警告：AUTH_MODE=none 关闭了认证，仅可用于本机开发，切勿部署到公网。');

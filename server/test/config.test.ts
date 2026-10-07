@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ConfigError, isLoopbackHost, loadConfig } from '../src/config.ts';
+import { ConfigError, isLoopbackHost, isWeakAuthPassword, loadConfig } from '../src/config.ts';
 
 test('默认值：回环、18940、builtin、服务静态', () => {
   const config = loadConfig({});
@@ -100,6 +100,17 @@ test('WebDAV：非法参数抛错', () => {
   assert.throws(() => loadConfig({ WEBDAV_KEEP: '0' }), ConfigError);
   assert.throws(() => loadConfig({ WEBDAV_TIMEOUT_SECONDS: '9999' }), ConfigError);
   assert.throws(() => loadConfig({ WEBDAV_ENCRYPT: 'maybe' }), ConfigError);
+});
+
+test('isWeakAuthPassword：builtin + changeme / 长度 < 8 告警，其余不告警', () => {
+  assert.equal(isWeakAuthPassword({ authMode: 'builtin', authPassword: 'changeme' }), true);
+  assert.equal(isWeakAuthPassword({ authMode: 'builtin', authPassword: '1234567' }), true);
+  assert.equal(isWeakAuthPassword({ authMode: 'builtin', authPassword: '12345678' }), false);
+  assert.equal(isWeakAuthPassword({ authMode: 'builtin', authPassword: 'a-strong-password' }), false);
+  // 留空表示首次启动生成一次性随机口令，不算弱口令。
+  assert.equal(isWeakAuthPassword({ authMode: 'builtin', authPassword: '' }), false);
+  assert.equal(isWeakAuthPassword({ authMode: 'sso', authPassword: 'changeme' }), false);
+  assert.equal(isWeakAuthPassword({ authMode: 'none', authPassword: 'x' }), false);
 });
 
 test('WEBDAV_RELAY_ALLOW_PRIVATE：默认关，仅显式真值为首次默认开', () => {

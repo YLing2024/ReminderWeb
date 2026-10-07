@@ -17,7 +17,7 @@ import {
 } from './app-mode';
 import type { HealthInfo } from './api';
 
-const HEALTH: HealthInfo = { ok: true, revision: 3, authMode: 'builtin' };
+const HEALTH: HealthInfo = { ok: true, revision: 3, authMode: 'builtin', authWarning: false };
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });

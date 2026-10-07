@@ -210,6 +210,18 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   };
 }
 
+/**
+ * 是否为需要提醒的默认 / 弱口令（M12 §3.2）：
+ * `AUTH_MODE=builtin` 且口令仍是 `changeme`，或长度不足 8。
+ * 口令留空（首次启动会生成一次性随机口令）不算弱口令。
+ */
+export function isWeakAuthPassword(input: { authMode: AuthMode; authPassword: string }): boolean {
+  if (input.authMode !== 'builtin') return false;
+  const password = input.authPassword;
+  if (password === '') return false;
+  return password === 'changeme' || password.length < 8;
+}
+
 /** 启动摘要（不含任何敏感值）。 */
 export function describeConfig(config: Config): string {
   return [

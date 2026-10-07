@@ -96,8 +96,10 @@ interface ReminderStore {
   serverUser: string | null;
   revision: number | null;
   serverVersion: string | null;
-  /** 后端是否可达（用于设置页置灰服务器模式入口 / 自动选择 WebDAV 连接方式）。 */
+  /** 后端是否可达（用于设置页置灰服务器模式入口）。 */
   serverReachable: boolean;
+  /** 服务器是否仍在使用默认 / 弱口令（M12 §3.2）；设置页据此显示可关闭提醒条。 */
+  authWarning: boolean;
   /** 服务端当前持有的卡片背景图文件名。 */
   serverImageNames: string[];
   syncing: boolean;
@@ -311,6 +313,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
     revision: null,
     serverVersion: null,
     serverReachable: false,
+    authWarning: false,
     serverImageNames: [],
     syncing: false,
     dirty: false,
@@ -339,10 +342,18 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
         set({ mode: 'client', authRequired: false });
         if (detection.source === 'local' && !detection.staticOnly) {
           const health = await probeHealth();
-          if (health !== null) set({ serverReachable: true, authMode: health.authMode, revision: health.revision });
-          else set({ serverReachable: false });
+          if (health !== null) {
+            set({
+              serverReachable: true,
+              authMode: health.authMode,
+              revision: health.revision,
+              authWarning: health.authWarning,
+            });
+          } else {
+            set({ serverReachable: false, authWarning: false });
+          }
         } else {
-          set({ serverReachable: false });
+          set({ serverReachable: false, authWarning: false });
         }
         return;
       }
@@ -365,7 +376,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
         }
         return;
       }
-      set({ authMode: health.authMode, revision: health.revision, serverReachable: true });
+      set({
+        authMode: health.authMode,
+        revision: health.revision,
+        serverReachable: true,
+        authWarning: health.authWarning,
+      });
 
       const cache = await loadServerCache().catch(() => null);
       try {

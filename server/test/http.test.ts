@@ -8,9 +8,27 @@ test('health 免认证且不含敏感信息', async () => {
     const res = await fetch(`${ts.url}/api/health`);
     assert.equal(res.status, 200);
     const body = (await res.json()) as Record<string, unknown>;
-    assert.deepEqual(body, { ok: true, revision: 0, authMode: 'builtin' });
+    assert.deepEqual(body, { ok: true, revision: 0, authMode: 'builtin', authWarning: false });
   } finally {
     await ts.close();
+  }
+});
+
+test('health：builtin + 默认/弱口令时 authWarning=true，强口令/none 时为 false', async () => {
+  const cases: Array<{ env: Record<string, string>; expected: boolean }> = [
+    { env: { AUTH_MODE: 'builtin', AUTH_PASSWORD: 'changeme' }, expected: true },
+    { env: { AUTH_MODE: 'builtin', AUTH_PASSWORD: 'short' }, expected: true },
+    { env: { AUTH_MODE: 'builtin', AUTH_PASSWORD: 'long-enough-pass' }, expected: false },
+    { env: { AUTH_MODE: 'none' }, expected: false },
+  ];
+  for (const { env, expected } of cases) {
+    const ts = await startTestServer({ env });
+    try {
+      const body = (await (await fetch(`${ts.url}/api/health`)).json()) as Record<string, unknown>;
+      assert.equal(body.authWarning, expected, JSON.stringify(env));
+    } finally {
+      await ts.close();
+    }
   }
 });
 
