@@ -13,9 +13,17 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],
+          lunar: ['lunar-javascript'],
+        },
+      },
+    },
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 });
