@@ -4,6 +4,7 @@ import { AppLockGate } from './components/AppLockGate';
 import { LunarGate } from './components/LunarGate';
 import { ThemeController } from './components/ThemeController';
 import HomePage from './pages/HomePage';
+import { useNotificationScheduler } from './lib/notifications';
 import { useReminderStore } from './store/useReminderStore';
 
 const EditPage = lazy(() => import('./pages/EditPage'));
@@ -22,6 +23,8 @@ export default function App() {
   useEffect(() => {
     if (!loaded) void hydrate();
   }, [loaded, hydrate]);
+
+  useNotificationScheduler();
 
   return (
     <Suspense fallback={<div style={{ padding: 24, textAlign: 'center' }}>正在载入…</div>}>
