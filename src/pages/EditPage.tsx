@@ -153,7 +153,9 @@ export default function EditPage() {
                 className={styles.input}
                 type="date"
                 value={draft.date}
-                onChange={(event) => patch({ date: event.target.value })}
+                onChange={(event) =>
+                  patch({ date: event.target.value === '' ? toISODate(todayLocalDate()) : event.target.value })
+                }
               />
             )}
             <button type="button" className={styles.todayButton} onClick={() => patch({ date: toISODate(todayLocalDate()) })}>
@@ -301,7 +303,7 @@ export default function EditPage() {
               type="date"
               value={draft.endDate}
               min={draft.date}
-              onChange={(event) => patch({ endDate: event.target.value })}
+              onChange={(event) => patch({ endDate: event.target.value === '' ? null : event.target.value })}
             />
           </label>
         )}
