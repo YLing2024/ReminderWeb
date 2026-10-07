@@ -12,7 +12,7 @@
   text-align: center;
 }
 
-.bar[data-kind='local'] {
+.bar[data-kind='client'] {
   background: color-mix(in srgb, var(--md-sys-color-secondary) 16%, var(--md-sys-color-surface));
   color: var(--md-sys-color-on-surface-variant);
 }

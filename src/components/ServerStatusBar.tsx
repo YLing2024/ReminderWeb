@@ -2,8 +2,8 @@ import { useReminderStore } from '../store/useReminderStore';
 import styles from './ServerStatusBar.module.css';
 
 /**
- * 全局服务器状态条（需求 §7）：
- * - 本地模式：明确标注「本地模式」；
+ * 全局服务器状态条（需求 §7 / M10 §1）：
+ * - 客户端模式（纯前端）：明确标注「客户端模式」；
  * - 服务器为空而本机有旧数据：提示一键上传；
  * - 同步失败：中文提示并允许重试。
  */
@@ -17,10 +17,10 @@ export function ServerStatusBar() {
   const uploadLocalData = useReminderStore((state) => state.uploadLocalData);
   const syncNow = useReminderStore((state) => state.syncNow);
 
-  if (mode === 'local') {
+  if (mode === 'client') {
     return (
-      <div className={styles.bar} data-kind="local" role="status">
-        本地模式 · 数据仅保存在本机
+      <div className={styles.bar} data-kind="client" role="status">
+        客户端模式 · 数据保存在本机浏览器，可通过 WebDAV 备份与其它设备互通
       </div>
     );
   }

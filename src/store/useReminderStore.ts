@@ -1,12 +1,12 @@
 /**
  * 应用状态（zustand）：启动时载入数据，变更后持久化。
  *
- * 双驱动（需求 §7）：
- * - 本地模式：与历史行为一致，纯 IndexedDB（键 `reminderweb:data`）；
+ * 双驱动（需求 §7 / M10 §1）：
+ * - 客户端模式（纯前端）：与历史行为一致，纯 IndexedDB（键 `reminderweb:data`），不发任何 /api 请求；
  * - 服务器模式：以服务器为准，IndexedDB 仅作只读缓存（键 `reminderweb:cache`），
  *   写操作走 `PUT /api/data`，成功后采纳服务器返回的权威数据。
  *
- * 判据：运行期探测 `/api/health`；探测失败不报错，回落本地模式。
+ * 判据：运行模式由 `lib/app-mode` 按 config.json > VITE_APP_MODE > 探测 `/api/health` 决定。
  */
 import { create } from 'zustand';
 import type { ReminderItem, TagItem } from '../types/reminder';
@@ -34,6 +34,7 @@ import {
   type SyncTag,
   type SyncTombstone,
 } from '../lib/api';
+import { detectAppMode } from '../lib/app-mode';
 import {
   LOCAL_ONLY_SETTING_KEYS,
   loadServerCache,
@@ -45,7 +46,7 @@ import {
 
 const DEFAULT_TAG_COLORS = ['#2196F3', '#E91E63', '#4CAF50', '#FF9800', '#9C27B0', '#009688'];
 
-export type StorageMode = 'unknown' | 'local' | 'server';
+export type StorageMode = 'unknown' | 'client' | 'server';
 
 export interface ServerInfo {
   revision: number | null;
@@ -253,15 +254,34 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
         tags: local.tags,
         settings: local.settings,
         loaded: true,
-        ...(local.webdavCredsMigrated ? { serverNotice: '云备份凭据已迁移到服务器端配置' } : {}),
       });
 
-      const health = await probeHealth();
-      if (health === null) {
-        set({ mode: 'local', authRequired: false });
+      const detection = await detectAppMode();
+      if (detection.mode === 'client') {
+        // 纯前端：数据存 IndexedDB，不发任何 /api 请求。
+        set({ mode: 'client', authRequired: false });
         return;
       }
-      set({ mode: 'server', authMode: health.authMode, revision: health.revision });
+      set({ mode: 'server' });
+
+      const health = detection.health ?? (await probeHealth());
+      if (health === null) {
+        // 显式服务器模式但后端不可达：保留服务器模式与本地数据，提示错误。
+        set({ syncError: '连不上服务器，请检查网络或后端地址' });
+        const fallback = await loadServerCache().catch(() => null);
+        if (fallback !== null) {
+          set({
+            reminders: fallback.reminders,
+            tags: fallback.tags,
+            settings: mergeServerSettings(local.settings, fallback.settings.value),
+            revision: fallback.revision,
+            settingsUpdatedAt: fallback.settings.updatedAt,
+            tombstones: fallback.tombstones,
+          });
+        }
+        return;
+      }
+      set({ authMode: health.authMode, revision: health.revision });
 
       const cache = await loadServerCache().catch(() => null);
       try {
