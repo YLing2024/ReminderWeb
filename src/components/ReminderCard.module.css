@@ -19,6 +19,8 @@
 }
 
 .band {
+  /* 固定三区之一：色带高度不随标题长度变化 */
+  flex: none;
   height: var(--band-height);
   display: flex;
   align-items: center;
@@ -27,8 +29,11 @@
 }
 
 .bandText {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -36,7 +41,7 @@
 }
 
 .body {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   align-items: baseline;
   justify-content: center;
@@ -65,6 +70,8 @@
 }
 
 .footer {
+  /* 固定三区之一：底带高度恒定，主体吸收行内剩余高度 */
+  flex: none;
   padding: 8px;
   background: color-mix(in srgb, var(--md-sys-color-on-surface) 7%, var(--md-sys-color-surface));
 }
