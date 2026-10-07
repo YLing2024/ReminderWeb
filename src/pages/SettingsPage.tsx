@@ -7,6 +7,7 @@ import {
   CalculatorIcon,
   CheckIcon,
   ChevronRightIcon,
+  CloudIcon,
   HomeIcon,
   LockIcon,
   PaletteIcon,
@@ -14,6 +15,7 @@ import {
   TagIcon,
 } from '../components/icons';
 import { ConfirmDialog, IconButton, Toggle } from '../components/ui';
+import { WebDavSettings } from '../components/WebDavSettings';
 import { SEED_PALETTES } from '../lib/theme';
 import { hashPin, isValidPin, verifyPin } from '../lib/pin';
 import { buildIcs } from '../lib/ics';
@@ -355,6 +357,10 @@ export default function SettingsPage() {
               onClick={() => setShowClearDialog(true)}
             />
           </div>
+        </Group>
+
+        <Group title="WebDAV 云备份" icon={<CloudIcon width={18} height={18} />}>
+          <WebDavSettings onNotice={setNotice} />
         </Group>
 
         <Group title="安全" icon={<LockIcon width={18} height={18} />}>

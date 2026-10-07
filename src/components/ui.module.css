@@ -41,6 +41,11 @@
   background: var(--md-sys-color-primary);
 }
 
+.toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .toggleThumb {
   position: absolute;
   top: 4px;

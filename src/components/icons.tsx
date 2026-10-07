@@ -252,8 +252,15 @@ export function StorageIcon(props: IconProps) {
   );
 }
 
-export function CalculatorIcon(props: IconProps) {
+export function CloudIcon(props: IconProps) {
   return (
+    <Svg {...props}>
+      <path d="M7 18a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6-1.3A3.8 3.8 0 0 1 18 18Z" />
+    </Svg>
+  );
+}
+
+export function CalculatorIcon(props: IconProps) {  return (
     <Svg {...props}>
       <rect x="5" y="3" width="14" height="18" rx="2" />
       <path d="M8 7h8" />

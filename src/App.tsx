@@ -5,6 +5,7 @@ import { ErrorBoundary, UnhandledErrorNotice } from './components/ErrorBoundary'
 import { LunarGate } from './components/LunarGate';
 import { ThemeController } from './components/ThemeController';
 import HomePage from './pages/HomePage';
+import { useCloudAutoBackup } from './lib/cloud-auto';
 import { useNotificationScheduler } from './lib/notifications';
 import { useReminderStore } from './store/useReminderStore';
 
@@ -27,6 +28,7 @@ export default function App() {
   }, [loaded, hydrate]);
 
   useNotificationScheduler();
+  useCloudAutoBackup();
 
   return (
     <>
