@@ -88,9 +88,10 @@ export default function BackupPage() {
           <p className={styles.desc}>
             打包提醒、标签、主题与本地设置为 zip（metadata.json + images/），可直接导入安卓版 Reminder。
           </p>
+          <p className={styles.desc}>自动备份与云端恢复在「设置 → WebDAV 云备份」，本页只负责本地文件导出/导入。</p>
           <div className={styles.switchRow}>
             <div className={styles.rowText}>
-              <p className={styles.rowTitle}>加密（兼容安卓）</p>
+              <p className={styles.rowTitle}>加密（导出与自动上传共用，兼容安卓版）</p>
               <p className={styles.rowDesc}>按上游 AES/CBC 口径整包加密，导入时自动识别</p>
             </div>
             <Toggle

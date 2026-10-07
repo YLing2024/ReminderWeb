@@ -68,6 +68,17 @@ export interface RemoteBackupFile {
   modifiedAt: number;
 }
 
+/** 云端备份条目（M9 §2.1）：isOwn 决定能否删除。 */
+export interface RemoteBackupEntry {
+  name: string;
+  size: number;
+  modifiedAt: number;
+  isOwn: boolean;
+}
+
+/** 同步动作（M9 §2.5）。 */
+export type SyncAction = 'upload' | 'pull' | 'restore' | 'none';
+
 /** WebDAV 同步状态（不含凭据与远端其它文件信息）。 */
 export interface SyncStatus {
   enabled: boolean;
@@ -78,6 +89,34 @@ export interface SyncStatus {
   lastError: string | null;
   pendingChanges: boolean;
   remoteFiles: RemoteBackupFile[];
+  /** 下次自动同步的预计时间戳；未启用 / 未排期为 null。 */
+  nextSyncAt: number | null;
+  /** 最近一次同步合并的条目数。 */
+  lastMerged: number;
+  /** 最近一次同步 / 备份的动作。 */
+  lastAction: SyncAction;
+}
+
+/** 同步配置（存服务端，所有设备一致；不含凭据）。 */
+export interface SyncConfig {
+  enabled: boolean;
+  intervalMinutes: number;
+  keep: number;
+  options: { intervals: number[]; keepRange: [number, number] };
+  url: string;
+}
+
+/** 恢复结果（M9 §2.2）。 */
+export interface SyncRestoreResult {
+  applied: { updated: number; added: number; removed: number; rejected: number };
+  revision: number;
+}
+
+/** 立即备份结果（M9 §2.4）。 */
+export interface SyncUploadResult {
+  name: string;
+  size: number;
+  lastUploadAt: number | null;
 }
 
 export interface PushPayload {
@@ -151,6 +190,23 @@ function buildUrl(path: string, deps: ApiDeps): string {
   return `${deps.base ?? apiBase()}${path}`;
 }
 
+/** 从错误响应体取服务端中文文案（有则优先，否则回落到状态码映射）。 */
+async function errorFromResponse(response: Response): Promise<ApiError> {
+  const mapped = mapHttpStatus(response.status);
+  try {
+    const body = (await response.json()) as unknown;
+    if (body !== null && typeof body === 'object' && !Array.isArray(body)) {
+      const message = (body as Record<string, unknown>).message;
+      if (typeof message === 'string' && message !== '') {
+        return new ApiError(mapped.code, message, response.status);
+      }
+    }
+  } catch {
+    // 无 JSON 体时保持状态码映射文案。
+  }
+  return mapped;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -171,7 +227,7 @@ async function request<T>(
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
-    if (!response.ok) throw mapHttpStatus(response.status);
+    if (!response.ok) throw await errorFromResponse(response);
     if (response.status === 204) return undefined as T;
     try {
       return (await response.json()) as T;
@@ -228,6 +284,40 @@ export async function fetchSyncStatus(deps: ApiDeps = {}): Promise<SyncStatus> {
 /** 触发后端立即执行一次 WebDAV 同步（进行中/未启用时后端返回 409）。 */
 export async function triggerSyncNow(deps: ApiDeps = {}): Promise<SyncStatus> {
   return request<SyncStatus>('POST', '/api/sync/now', undefined, deps);
+}
+
+/** 读取同步配置（存服务端，所有设备一致）。 */
+export async function fetchSyncConfig(deps: ApiDeps = {}): Promise<SyncConfig> {
+  return request<SyncConfig>('GET', '/api/sync/config', undefined, deps);
+}
+
+/** 更新同步配置（可只传子集）；返回更新后的完整配置。 */
+export async function updateSyncConfig(
+  patch: Partial<Pick<SyncConfig, 'enabled' | 'intervalMinutes' | 'keep'>>,
+  deps: ApiDeps = {},
+): Promise<SyncConfig> {
+  return request<SyncConfig>('PUT', '/api/sync/config', patch, deps);
+}
+
+/** 列出云端备份（含 isOwn，时间倒序）。 */
+export async function fetchSyncFiles(deps: ApiDeps = {}): Promise<RemoteBackupEntry[]> {
+  const body = await request<{ files: RemoteBackupEntry[] }>('GET', '/api/sync/files', undefined, deps);
+  return Array.isArray(body.files) ? body.files : [];
+}
+
+/** 从指定云端备份恢复（只读，绝不删除远端文件）。 */
+export async function restoreSyncFile(name: string, deps: ApiDeps = {}): Promise<SyncRestoreResult> {
+  return request<SyncRestoreResult>('POST', '/api/sync/restore', { name }, deps);
+}
+
+/** 立即备份：只上传当前数据，不拉取、不合并。 */
+export async function uploadSyncNow(deps: ApiDeps = {}): Promise<SyncUploadResult> {
+  return request<SyncUploadResult>('POST', '/api/sync/upload', undefined, deps);
+}
+
+/** 删除自己上传的云端备份（别人的后端返回 403）。 */
+export async function deleteSyncFile(name: string, deps: ApiDeps = {}): Promise<void> {
+  await request<unknown>('DELETE', `/api/sync/files/${encodeURIComponent(name)}`, undefined, deps);
 }
 
 export async function pushData(payload: PushPayload, deps: ApiDeps = {}): Promise<PushResult> {
