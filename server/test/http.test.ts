@@ -218,6 +218,14 @@ test('静态服务：index、深链回退、资源类型、禁止点文件与源
     assert.match(asset.headers.get('content-type') ?? '', /javascript/);
     assert.match(await asset.text(), /FIXTURE_APP_JS/);
 
+    // 带扩展名的静态资源缺失时必须 404，不能回退 index.html（否则部署缺文件被静默掩盖）。
+    const missingAsset = await fetch(`${ts.url}/assets/does-not-exist.js`);
+    assert.equal(missingAsset.status, 404);
+    assert.deepEqual(await missingAsset.json(), { error: 'not_found' });
+
+    const missingPng = await fetch(`${ts.url}/assets/missing.png`);
+    assert.equal(missingPng.status, 404);
+
     const dotfile = await fetch(`${ts.url}/.secret`);
     assert.equal(dotfile.status, 404);
     assert.ok(!(await dotfile.text()).includes('top-secret-fixture'));

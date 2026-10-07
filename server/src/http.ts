@@ -177,6 +177,12 @@ function serveStatic(res: ServerResponse, config: Config, pathname: string): voi
     res.end(bytes);
     return;
   }
+  // 带扩展名的静态资源（/assets/*.js|css|png…）找不到时必须 404，
+  // 只有无扩展名的前端路由才回退 index.html，避免掩盖部署缺文件。
+  if (extname(decoded) !== '') {
+    sendJson(res, 404, { error: 'not_found' });
+    return;
+  }
   const indexPath = join(root, 'index.html');
   if (existsSync(indexPath)) {
     const bytes = readFileSync(indexPath);
