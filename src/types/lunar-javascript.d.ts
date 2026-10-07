@@ -29,6 +29,12 @@ declare module 'lunar-javascript' {
     next(amount: number): LunarMonth;
   }
 
+  export interface LunarYear {
+    getYear(): number;
+    getGanZhi(): string;
+    getMonthsInYear(): LunarMonth[];
+  }
+
   export const Solar: {
     fromYmd(year: number, month: number, day: number): Solar;
     fromDate(date: Date): Solar;
@@ -40,5 +46,9 @@ declare module 'lunar-javascript' {
 
   export const LunarMonth: {
     fromYm(year: number, month: number): LunarMonth;
+  };
+
+  export const LunarYear: {
+    fromYear(year: number): LunarYear;
   };
 }

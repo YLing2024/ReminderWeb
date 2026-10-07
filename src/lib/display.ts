@@ -89,7 +89,7 @@ export function reminderDisplayInfo(
         headerTitle: buildHeaderTitle(item.title, '第'),
         suffix: '第',
         dayCount: daysElapsed,
-        isToday: daysElapsed === (includeStartDay ? 1 : 0),
+        isToday: false,
         referenceText: formatReferenceDate(parseLocalDate(item.date), useLunar, shortFormat),
         intervalSubText: null,
       };

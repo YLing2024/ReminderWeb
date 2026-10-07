@@ -24,6 +24,7 @@ interface ReminderStore {
   togglePin: (id: number) => Promise<void>;
   findTag: (name: string) => TagItem | undefined;
   addTag: (name: string, color?: string) => Promise<TagItem | undefined>;
+  updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
 }
 
 function nextNumericId(items: Array<{ id: number }>): number {
@@ -91,6 +92,11 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
       set({ tags: [...tags, created] });
       await persist();
       return created;
+    },
+
+    updateSettings: async (partial) => {
+      set({ settings: { ...get().settings, ...partial } });
+      await persist();
     },
   };
 });

@@ -4,7 +4,7 @@
  * 农历月用负数表示闰月（与 lunar-javascript / tyme 一致）：
  * 例如 2023 年闰二月 → month = -2。
  */
-import { Lunar, LunarMonth, Solar } from 'lunar-javascript';
+import { Lunar, LunarMonth, LunarYear, Solar } from 'lunar-javascript';
 import { ld, toISODate, type LocalDate } from './local-date';
 
 export interface LunarDate {
@@ -105,6 +105,29 @@ export function lunarDisplay(date: LocalDate): LunarDisplay {
     monthLabel: mapMonthLabel(`${lunar.getMonthInChinese()}月`),
     dayLabel: lunar.getDayInChinese(),
   };
+}
+
+export interface LunarMonthOption {
+  /** 负数表示闰月。 */
+  month: number;
+  label: string;
+  dayCount: number;
+}
+
+/** 某农历年的全部月份（含闰月）。 */
+export function lunarMonthsOfYear(lunarYear: number): LunarMonthOption[] {
+  return LunarYear.fromYear(lunarYear)
+    .getMonthsInYear()
+    .map((month) => ({
+      month: month.getMonth(),
+      label: lunarMonthLabel(month.getYear(), month.getMonth()),
+      dayCount: month.getDayCount(),
+    }));
+}
+
+/** 公立年份对应的农历年（取该年春节所在农历年）。 */
+export function lunarYearForSolarYear(solarYear: number): number {
+  return solarToLunar(ld(solarYear, 7, 1)).year;
 }
 
 export { toISODate };
