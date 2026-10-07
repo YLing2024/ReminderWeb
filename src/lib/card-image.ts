@@ -74,7 +74,13 @@ async function decodeImage(source: Blob): Promise<DecodedImage> {
   const createImageBitmap = (globalThis as { createImageBitmap?: (input: Blob, options?: unknown) => Promise<ImageBitmap> })
     .createImageBitmap;
   if (typeof createImageBitmap === 'function') {
-    const bitmap = await createImageBitmap(source, { imageOrientation: 'from-image' });
+    let bitmap: ImageBitmap;
+    try {
+      bitmap = await createImageBitmap(source, { imageOrientation: 'from-image' });
+    } catch {
+      // 少数浏览器不支持 imageOrientation 选项，回落到默认解码。
+      bitmap = await createImageBitmap(source);
+    }
     return {
       source: bitmap,
       width: bitmap.width,
