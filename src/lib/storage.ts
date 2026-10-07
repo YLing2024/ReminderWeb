@@ -2,8 +2,13 @@
  * IndexedDB 持久化（idb-keyval）。
  *
  * 存放约定（需求 §3）：
- * - 结构化数据一份存 key `reminderweb:data`；
- * - 图片按文件名存 `reminderweb:image:<name>`，与安卓 zip 内 `images/<name>` 引用一致。
+ * - 结构化数据一份存 key `reminderweb:data`，其中包含 `settings`（`AppSettings`）；
+ * - 图片按文件名存 `reminderweb:image:<name>`，与安卓 zip 内 `images/<name>` 引用一致；
+ * - 字体按文件名存 `reminderweb:font:<name>`。
+ *
+ * WebDAV 云备份凭据不单独建 key：作为 `AppSettings` 的 `webdavServer /
+ * webdavUsername / webdavPassword` 字段，随结构化数据存在 `reminderweb:data` 这一键下。
+ * 密码只进不出：不写日志、不进导出备份（`toBackupData` 一律置空 webDav 字段）。
  */
 import { createStore, del, get, keys, set, clear } from 'idb-keyval';
 import type { ReminderItem, TagItem } from '../types/reminder';
@@ -41,6 +46,22 @@ export interface AppSettings {
   appLockEnabled: boolean;
   /** 安全：应用锁 PIN 的 SHA-256 十六进制摘要。 */
   appLockPinHash: string | null;
+  /** 云备份：是否启用 WebDAV。 */
+  webdavEnabled: boolean;
+  /** 云备份：服务器地址（完整 URL）。 */
+  webdavServer: string;
+  /** 云备份：Basic 认证用户名。 */
+  webdavUsername: string;
+  /** 云备份：Basic 认证密码（仅存本地，绝不导出、绝不打印）。 */
+  webdavPassword: string;
+  /** 云备份：数据变动后是否自动上传（节流 60 秒）。 */
+  webdavAutoBackup: boolean;
+  /** 云备份：远端保留份数（1–100，默认 10）。 */
+  webdavKeepCount: number;
+  /** 云备份：上次成功时间（epoch 毫秒）。 */
+  webdavLastSuccessAt: number | null;
+  /** 云备份：上次结果文案（成功或失败原因）。 */
+  webdavLastResult: string | null;
 }
 
 export interface PersistedData {
@@ -68,6 +89,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastBackupAt: null,
   appLockEnabled: false,
   appLockPinHash: null,
+  webdavEnabled: false,
+  webdavServer: '',
+  webdavUsername: '',
+  webdavPassword: '',
+  webdavAutoBackup: false,
+  webdavKeepCount: 10,
+  webdavLastSuccessAt: null,
+  webdavLastResult: null,
 };
 
 const store = createStore('reminderweb', 'kv');
