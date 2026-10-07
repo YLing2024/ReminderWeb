@@ -149,12 +149,12 @@ export default function EditPage() {
             {draft.isLunar ? (
               <LunarFields value={parseLocalDate(draft.date)} onChange={setLunarDate} />
             ) : (
-              <input
-                className={styles.input}
-                type="date"
+              <IsoDateInput
+                className={styles.dateGrow}
+                label="日期"
                 value={draft.date}
-                onChange={(event) =>
-                  patch({ date: event.target.value === '' ? toISODate(todayLocalDate()) : event.target.value })
+                onChange={(next) =>
+                  patch({ date: next === '' ? toISODate(todayLocalDate()) : next })
                 }
               />
             )}
@@ -265,13 +265,13 @@ export default function EditPage() {
                   </div>
                   <label className={styles.inlineRow}>
                     <span>截止日期</span>
-                    <input
-                      className={styles.input}
-                      type="date"
+                    <IsoDateInput
+                      className={styles.dateGrow}
+                      label="截止日期"
                       value={draft.repeatInfo.endDate ?? ''}
-                      onChange={(event) =>
+                      onChange={(next) =>
                         patch({
-                          repeatInfo: { ...draft.repeatInfo!, endDate: event.target.value === '' ? null : event.target.value },
+                          repeatInfo: { ...draft.repeatInfo!, endDate: next === '' ? null : next },
                         })
                       }
                     />
@@ -298,12 +298,11 @@ export default function EditPage() {
         {isInterval && draft.endDate !== null && (
           <label className={styles.field}>
             <span className={styles.fieldLabel}>结束日期</span>
-            <input
-              className={styles.input}
-              type="date"
+            <IsoDateInput
+              label="结束日期"
               value={draft.endDate}
               min={draft.date}
-              onChange={(event) => patch({ endDate: event.target.value === '' ? null : event.target.value })}
+              onChange={(next) => patch({ endDate: next === '' ? null : next })}
             />
           </label>
         )}
@@ -472,4 +471,40 @@ function LunarFields({ value, onChange }: { value: LocalDate; onChange: (year: n
 function describeLunar(value: LocalDate): string {
   const lunar = solarToLunar(value);
   return `${lunar.year}年 ${lunarMonthsOfYear(lunar.year).find((entry) => entry.month === lunar.month)?.label ?? ''}${lunarDayLabel(lunar.year, lunar.month, lunar.day)}`;
+}
+
+/**
+ * 日期输入：原生 date 选择器的显示格式受浏览器 locale 影响（如 10/07/2026）。
+ * 这里用自绘只读显示（固定 YYYY-MM-DD）+ 覆盖其上的透明原生选择器，
+ * 既保证显示口径，又保留原生日期选择体验。
+ */
+function IsoDateInput({
+  value,
+  onChange,
+  min,
+  label,
+  className,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  min?: string;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <span className={[styles.datePicker, className].filter(Boolean).join(' ')}>
+      <span className={styles.dateDisplay} aria-hidden="true">
+        {value === '' ? '选择日期' : value}
+      </span>
+      <input
+        className={styles.dateNative}
+        type="date"
+        lang="zh-CN"
+        value={value}
+        min={min}
+        aria-label={label}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </span>
+  );
 }
