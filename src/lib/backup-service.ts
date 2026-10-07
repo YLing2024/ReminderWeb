@@ -7,6 +7,7 @@
 import type { BackupData, ReminderItem, TagItem } from '../types/reminder';
 import type { AppSettings } from './storage';
 import { listImageNames, loadImageBlob, replaceImageBlobs, listFontNames, loadFontBlob, replaceFontBlobs } from './storage';
+import { stripSyncMeta } from './android-shape';
 import {
   backupFileName,
   collectArchiveImages,
@@ -14,6 +15,7 @@ import {
   encodeArchive,
   parseBackupData,
   referencedImageNames,
+  type ImportMetadataOptions,
 } from './backup';
 
 export interface ExportResult {
@@ -27,13 +29,6 @@ export interface ImportResult {
   tags: TagItem[];
   settings: Partial<AppSettings>;
   imageCount: number;
-}
-
-/** 去掉同步元数据 `updatedAt`，避免写入与安卓互通的备份包。 */
-function stripSyncMeta<T extends { updatedAt?: number }>(item: T): Omit<T, 'updatedAt'> {
-  const copy: T = { ...item };
-  delete copy.updatedAt;
-  return copy;
 }
 
 /** 由当前应用状态构造备份结构（未内联图片，图片随 zip 走）。 */
@@ -118,9 +113,9 @@ export function settingsFromBackup(metadata: BackupData): Partial<AppSettings> {
 }
 
 /** 导入：解析 + 校验 + 落库图片，返回可供 store 写入的数据。 */
-export async function importBackup(bytes: Uint8Array): Promise<ImportResult> {
+export async function importBackup(bytes: Uint8Array, options: ImportMetadataOptions = {}): Promise<ImportResult> {
   const content = await decodeArchive(bytes);
-  const metadata = parseBackupData(content.metadataJson);
+  const metadata = parseBackupData(content.metadataJson, options);
 
   const imageBytes = collectArchiveImages(content, metadata);
   const blobs: Record<string, Blob> = {};

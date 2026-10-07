@@ -8,8 +8,8 @@
  * 该模块保持纯函数（不触碰 IndexedDB / DOM），便于单测真实现往返。
  */
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import type { BackupData, ReminderItem, TagItem } from '../types/reminder';
-import { normalizeReminderList, normalizeTagList } from './normalize';
+import type { BackupData, ReminderItem, TagItem } from '../types/reminder.ts';
+import { fromAndroidReminderList, fromAndroidTagList } from './android-shape.ts';
 
 export const BACKUP_EXTENSION = '.zip';
 export const METADATA_ENTRY = 'metadata.json';
@@ -20,7 +20,7 @@ export const FONTS_DIR = 'fonts/';
  * 上游 BackupEncryptor.kt 的 40 字节混淆常量（照抄，保证能解开安卓端加密备份）。
  * 密钥种子 = 每个字节 XOR 90，再做 SHA-256。
  */
-const OBFUSCATED_KEY: ReadonlyArray<number> = [
+export const OBFUSCATED_KEY: ReadonlyArray<number> = [
   40, 63, 55, 51, 52, 62, 63, 40, 41, 63, 57, 47, 40, 63, 124, 59, 57, 49, 47, 34, 41, 63, 63, 62, 44, 59, 54, 47, 63, 37,
   104, 106, 104, 110, 37, 35, 56, 62, 61, 54,
 ];
@@ -157,8 +157,16 @@ function parseZip(zipBytes: Uint8Array): ArchiveContent {
   return { metadataJson: strFromU8(metadataBytes), images, fonts };
 }
 
+export interface ImportMetadataOptions {
+  /**
+   * 该批条目统一的最后修改时间（epoch 毫秒）。
+   * WebDAV 同步用备份文件的 `getlastmodified` 传入；手动导入不传。
+   */
+  updatedAt?: number;
+}
+
 /** 解析并粗校验 metadata.json（reminders 必须为数组）。 */
-export function parseBackupData(metadataJson: string): BackupData {
+export function parseBackupData(metadataJson: string, options: ImportMetadataOptions = {}): BackupData {
   let parsed: unknown;
   try {
     parsed = JSON.parse(metadataJson);
@@ -172,12 +180,12 @@ export function parseBackupData(metadataJson: string): BackupData {
   if (!Array.isArray(record.reminders)) {
     throw new BackupError('metadata.json 缺少 reminders 列表。');
   }
-  // 安卓 encodeDefaults=false，条目缺省字段必须补齐后再交给渲染层。
+  // 安卓 encodeDefaults=false：条目缺省字段经共享映射补齐后再交给渲染层。
   const tags = record.tags;
   return {
     ...(parsed as BackupData),
-    reminders: normalizeReminderList(record.reminders),
-    tags: Array.isArray(tags) ? normalizeTagList(tags) : null,
+    reminders: fromAndroidReminderList(record.reminders, options.updatedAt),
+    tags: Array.isArray(tags) ? fromAndroidTagList(tags, options.updatedAt) : null,
   };
 }
 

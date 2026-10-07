@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   parseClientData,
+  parseItemList,
   parseSettingsEnvelope,
   parseTombstone,
   parseWireItem,
@@ -64,4 +65,26 @@ test('parseClientData：缺省数组视为空，非数组计入 rejected', () =>
 test('parseClientData：整体非对象时 rejected=1', () => {
   assert.equal(parseClientData(null).rejected, 1);
   assert.equal(parseClientData([]).rejected, 1);
+});
+
+test('parseItemList：导入路径接受缺省 updatedAt 的条目（id 必需）', () => {
+  const rejected = { count: 0 };
+  const items = parseItemList(
+    [{ id: 1, title: '春节', isLunar: true, isPinned: false }, { id: 2, updatedAt: 50, title: '已有时间' }, { title: '无 id' }],
+    'reminder',
+    rejected,
+    { requireUpdatedAt: false, defaultUpdatedAt: 1234 },
+  );
+  assert.equal(rejected.count, 1);
+  assert.equal(items.length, 2);
+  assert.equal(items[0]?.updatedAt, 1234);
+  assert.equal(items[0]?.isLunar, true);
+  assert.equal(items[1]?.updatedAt, 50);
+});
+
+test('parseItemList：API 路径（默认）仍然强制要求 updatedAt', () => {
+  const rejected = { count: 0 };
+  const items = parseItemList([{ id: 1, title: '缺时间' }], 'reminder', rejected);
+  assert.equal(items.length, 0);
+  assert.equal(rejected.count, 1);
 });

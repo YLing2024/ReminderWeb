@@ -82,14 +82,29 @@ function validateTagFields(raw: Record<string, unknown>): boolean {
   return true;
 }
 
+/** 解析单个同步条目的可选项。 */
+export interface ParseItemOptions {
+  /** 是否强制要求 `updatedAt`（API 路径为 true，默认；导入备份包路径为 false）。 */
+  requireUpdatedAt?: boolean;
+  /** `updatedAt` 缺失且不强制时的补齐值（导入路径传入备份文件 mtime）。 */
+  defaultUpdatedAt?: number;
+}
+
 /** 解析单个同步条目；无效返回 null（调用方计入 rejected）。 */
-export function parseWireItem(raw: unknown, kind: ItemKind): WireItem | null {
+export function parseWireItem(raw: unknown, kind: ItemKind, options: ParseItemOptions = {}): WireItem | null {
   if (!isRecord(raw)) return null;
   if (!isPositiveInteger(raw.id)) return null;
-  if (!isTimestamp(raw.updatedAt)) return null;
+  let updatedAt: number;
+  if (isTimestamp(raw.updatedAt)) {
+    updatedAt = raw.updatedAt;
+  } else if (options.requireUpdatedAt === false) {
+    updatedAt = isTimestamp(options.defaultUpdatedAt) ? options.defaultUpdatedAt : 0;
+  } else {
+    return null;
+  }
   const validFields = kind === 'reminder' ? validateReminderFields(raw) : validateTagFields(raw);
   if (!validFields) return null;
-  return { ...raw, id: raw.id, updatedAt: raw.updatedAt };
+  return { ...raw, id: raw.id, updatedAt };
 }
 
 /** 解析墓碑；无效返回 null。`kind` 缺省按提醒解释。 */
@@ -113,7 +128,17 @@ export function parseSettingsEnvelope(raw: unknown): SettingsEnvelope | null {
   return { value: { ...raw.value }, updatedAt: raw.updatedAt };
 }
 
-function parseItemList(raw: unknown, kind: ItemKind, rejected: { count: number }): WireItem[] {
+/**
+ * 解析条目列表。默认要求每条携带 `updatedAt`（`PUT /api/data` API 路径）；
+ * 导入安卓备份包时传 `{ requireUpdatedAt: false, defaultUpdatedAt }`，接受缺省条目
+ * （`id` 必需；`updatedAt` 由导入路径用备份文件 mtime 补齐）。
+ */
+export function parseItemList(
+  raw: unknown,
+  kind: ItemKind,
+  rejected: { count: number },
+  options: ParseItemOptions = {},
+): WireItem[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
     rejected.count += 1;
@@ -121,7 +146,7 @@ function parseItemList(raw: unknown, kind: ItemKind, rejected: { count: number }
   }
   const out: WireItem[] = [];
   for (const entry of raw) {
-    const item = parseWireItem(entry, kind);
+    const item = parseWireItem(entry, kind, options);
     if (item === null) rejected.count += 1;
     else out.push(item);
   }

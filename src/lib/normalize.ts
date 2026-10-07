@@ -18,7 +18,7 @@ import {
   type RepeatInfo,
   type RepeatUnit,
   type TagItem,
-} from '../types/reminder';
+} from '../types/reminder.ts';
 
 /** 缺日期时的安全回落值（固定常量，保证纯函数不读时钟）。 */
 export const FALLBACK_DATE = '1970-01-01';
