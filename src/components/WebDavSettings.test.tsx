@@ -125,6 +125,10 @@ describe('WebDavSettings 两模式分组显隐', () => {
     expect(html).toContain('自动备份');
     expect(html).toContain('保留份数');
     expect(html).toContain('WebDAV 请求经本应用服务器转发，因此浏览器不受跨域限制。');
+    // M12 §3.1：内网转发开关与说明进入设置页（SSR 下后端未知，置灰并给提示）。
+    expect(html).toContain('允许转发到内网地址');
+    expect(html).toContain('只有当你的 WebDAV 装在局域网');
+    expect(html).toContain('需要本应用服务器在运行才能修改该开关。');
     expect(html).not.toContain('立即同步');
   });
 

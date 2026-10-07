@@ -126,6 +126,12 @@ export interface SyncConfig {
   url: string;
 }
 
+/** 客户端模式 WebDAV 转发的服务器级设置（M12 §3.1）。 */
+export interface WebDavRelayConfig {
+  /** 是否放行指向回环 / 内网 / 链路本地 / 云元数据的目标（默认关）。 */
+  relayAllowPrivate: boolean;
+}
+
 /** 恢复结果（M9 §2.2）。 */
 export interface SyncRestoreResult {
   applied: { updated: number; added: number; removed: number; rejected: number };
@@ -329,6 +335,19 @@ export async function updateSyncConfig(
   deps: ApiDeps = {},
 ): Promise<SyncConfig> {
   return request<SyncConfig>('PUT', '/api/sync/config', patch, deps);
+}
+
+/** 读取 WebDAV 转发的服务器级设置（当前仅「允许转发到内网地址」）。 */
+export async function fetchWebDavRelayConfig(deps: ApiDeps = {}): Promise<WebDavRelayConfig> {
+  return request<WebDavRelayConfig>('GET', '/api/webdav/config', undefined, deps);
+}
+
+/** 更新「允许转发到内网地址」开关。 */
+export async function updateWebDavRelayConfig(
+  relayAllowPrivate: boolean,
+  deps: ApiDeps = {},
+): Promise<WebDavRelayConfig> {
+  return request<WebDavRelayConfig>('PUT', '/api/webdav/config', { relayAllowPrivate }, deps);
 }
 
 /** 列出云端备份（时间倒序）。 */

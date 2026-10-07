@@ -22,6 +22,7 @@ import {
 } from './routes/data.ts';
 import { handleLogin, handleLogout, handleMe } from './routes/auth.ts';
 import { handleHealth, handleVersion } from './routes/health.ts';
+import { handleRelayConfigGet, handleRelayConfigPut } from './routes/webdav-config.ts';
 import { handleWebDavRelay } from './routes/webdav-relay.ts';
 import {
   handleSyncConfigGet,
@@ -300,6 +301,8 @@ async function dispatch(ctx: RouteContext): Promise<RouteResponse> {
     if (ctx.method === 'GET') return handleGetImage(ctx);
     if (ctx.method === 'DELETE') return handleDeleteImage(ctx);
   }
+  if (key === 'GET /api/webdav/config') return handleRelayConfigGet(ctx);
+  if (key === 'PUT /api/webdav/config') return handleRelayConfigPut(ctx);
   if (ctx.path === '/api/webdav' || ctx.path.startsWith('/api/webdav/')) {
     return handleWebDavRelay(ctx);
   }
@@ -330,14 +333,20 @@ function sendResponse(res: ServerResponse, response: RouteResponse): void {
 }
 
 /** 按路由选择请求体上限：整库替换与图片上传更宽松；其余保持 2 MiB。 */
+/** 转发路由：`/api/webdav` 与 `/api/webdav/*`，但 `/api/webdav/config` 是普通 JSON 设置接口。 */
+function isRelayPath(path: string): boolean {
+  if (path === '/api/webdav' || path === '/api/webdav/config') return false;
+  return path.startsWith('/api/webdav/');
+}
+
 function bodyLimitFor(method: string, path: string): number {
   if (method === 'PUT' && path === '/api/data/replace') return MAX_REPLACE_BODY_BYTES;
-  if (path === '/api/webdav' || path.startsWith('/api/webdav/')) return MAX_RELAY_BODY_BYTES;
+  if (path === '/api/webdav' || isRelayPath(path)) return MAX_RELAY_BODY_BYTES;
   return MAX_BODY_BYTES;
 }
 
 function isBinaryBodyRoute(method: string, path: string): boolean {
-  if (path === '/api/webdav' || path.startsWith('/api/webdav/')) return true;
+  if (path === '/api/webdav' || isRelayPath(path)) return true;
   return path.startsWith('/api/images/') && (method === 'PUT' || method === 'POST');
 }
 

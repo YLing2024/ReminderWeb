@@ -13,7 +13,8 @@
 import {
   buildAuthHeader,
 } from '../webdav.ts';
-import { checkRelayTarget, relayAllowsPrivate } from '../ssrf.ts';
+import { checkRelayTarget } from '../ssrf.ts';
+import { readRelayAllowPrivate } from '../server-settings.ts';
 import type { RouteContext, RouteResponse } from '../http.ts';
 
 /** 允许转发的动词。 */
@@ -46,9 +47,18 @@ export async function handleWebDavRelay(ctx: RouteContext): Promise<RouteRespons
     return { status: 400, body: { error: 'missing_target', message: '缺少目标地址' } };
   }
 
-  const check = checkRelayTarget(target.trim(), relayAllowsPrivate());
+  const allowPrivate = readRelayAllowPrivate(ctx.db, ctx.config);
+  const check = checkRelayTarget(target.trim(), allowPrivate);
   if (!check.ok) {
-    return { status: 403, body: { error: 'target_not_allowed', message: check.reason ?? '目标地址不被允许' } };
+    // 可读错误并指向设置页开关（M12 §3.1）。
+    const reason = check.reason ?? '目标地址不被允许';
+    const hint = allowPrivate
+      ? ''
+      : '若你的 WebDAV 装在局域网（NAS、路由器等），请在设置页打开「允许转发到内网地址」。';
+    return {
+      status: 403,
+      body: { error: 'target_not_allowed', message: hint === '' ? reason : `${reason}。${hint}` },
+    };
   }
 
   const user = firstHeader(ctx.headers, 'x-dav-user') ?? '';

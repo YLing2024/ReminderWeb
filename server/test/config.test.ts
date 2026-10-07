@@ -102,6 +102,13 @@ test('WebDAV：非法参数抛错', () => {
   assert.throws(() => loadConfig({ WEBDAV_ENCRYPT: 'maybe' }), ConfigError);
 });
 
+test('WEBDAV_RELAY_ALLOW_PRIVATE：默认关，仅显式真值为首次默认开', () => {
+  assert.equal(loadConfig({}).webdavRelayAllowPrivate, false);
+  assert.equal(loadConfig({ WEBDAV_RELAY_ALLOW_PRIVATE: '0' }).webdavRelayAllowPrivate, false);
+  assert.equal(loadConfig({ WEBDAV_RELAY_ALLOW_PRIVATE: '1' }).webdavRelayAllowPrivate, true);
+  assert.equal(loadConfig({ WEBDAV_RELAY_ALLOW_PRIVATE: 'true' }).webdavRelayAllowPrivate, true);
+});
+
 test('CORS：默认为空、逗号白名单去重并规范化为 origin', () => {
   assert.deepEqual(loadConfig({}).allowedOrigins, []);
   const config = loadConfig({

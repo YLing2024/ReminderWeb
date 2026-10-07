@@ -5,6 +5,7 @@
  * 启动时绝不在日志中输出 `AUTH_PASSWORD` 等敏感值。
  */
 import { resolve } from 'node:path';
+import { relayAllowsPrivate } from './ssrf.ts';
 
 export type AuthMode = 'builtin' | 'sso' | 'none';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -45,6 +46,11 @@ export interface Config {
   allowedOrigins: string[];
   /** 会话 Cookie 的 SameSite 策略。 */
   cookieSameSite: CookieSameSite;
+  /**
+   * 客户端模式 WebDAV 转发是否放行内网地址的**首次默认值**（M12 §3.1）。
+   * 运行期以数据库中持久化的 `relayAllowPrivate` 为准（设置页可改）。
+   */
+  webdavRelayAllowPrivate: boolean;
 }
 
 /** 配置错误：`message` 可直接展示给运维。 */
@@ -200,6 +206,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     webdavTimeoutSeconds,
     allowedOrigins,
     cookieSameSite,
+    webdavRelayAllowPrivate: relayAllowsPrivate(env),
   };
 }
 
@@ -212,5 +219,6 @@ export function describeConfig(config: Config): string {
     `静态文件 ${config.serveStatic ? config.staticDir : '关闭'}`,
     `WebDAV ${config.webdavEnabled ? `同步到 ${config.webdavUrl}` : '关闭'}`,
     `CORS ${config.allowedOrigins.length > 0 ? config.allowedOrigins.join(',') : '关闭'}`,
+    `内网转发 ${config.webdavRelayAllowPrivate ? '允许' : '关闭'}`,
   ].join(' | ');
 }

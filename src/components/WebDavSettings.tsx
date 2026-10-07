@@ -5,9 +5,11 @@ import {
   fetchSyncConfig,
   fetchSyncFiles,
   fetchSyncStatus,
+  fetchWebDavRelayConfig,
   restoreSyncFile,
   triggerSyncNow,
   updateSyncConfig,
+  updateWebDavRelayConfig,
   uploadSyncNow,
   type RemoteBackupEntry,
   type SyncConfig,
@@ -347,15 +349,51 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
   const reminders = useReminderStore((state) => state.reminders);
   const tags = useReminderStore((state) => state.tags);
   const importData = useReminderStore((state) => state.importData);
+  const serverReachable = useReminderStore((state) => state.serverReachable);
 
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState<'test' | 'upload' | 'list' | 'restore' | 'delete' | null>(null);
   const [files, setFiles] = useState<WebDavFile[] | null>(null);
   const [pendingRestore, setPendingRestore] = useState<WebDavFile | null>(null);
   const [pendingDelete, setPendingDelete] = useState<WebDavFile | null>(null);
+  const [relayAllowPrivate, setRelayAllowPrivate] = useState<boolean | null>(null);
+  const [relaySaving, setRelaySaving] = useState(false);
 
   const disabled = !settings.webdavEnabled;
   const working = busy !== null;
+
+  // 「允许转发到内网地址」是服务端持久化设置（M12 §3.1）；后端可达时读取，不可达时置灰。
+  useEffect(() => {
+    if (!serverReachable) {
+      setRelayAllowPrivate(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const config = await fetchWebDavRelayConfig();
+        if (!cancelled) setRelayAllowPrivate(config.relayAllowPrivate);
+      } catch {
+        if (!cancelled) setRelayAllowPrivate(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [serverReachable]);
+
+  const toggleRelay = async (next: boolean) => {
+    setRelaySaving(true);
+    try {
+      const config = await updateWebDavRelayConfig(next);
+      setRelayAllowPrivate(config.relayAllowPrivate);
+      onNotice(next ? '已允许转发到内网地址' : '已拒绝转发到内网地址');
+    } catch (error) {
+      onNotice(`保存失败：${errorMessage(error)}`);
+    } finally {
+      setRelaySaving(false);
+    }
+  };
 
   const ensureConfigured = (): boolean => {
     if (settings.webdavServer.trim() === '') {
@@ -462,6 +500,24 @@ function ClientWebDavPanel({ onNotice }: { onNotice: (message: string) => void }
       </div>
 
       <p className={styles.fieldHint}>WebDAV 请求经本应用服务器转发，因此浏览器不受跨域限制。</p>
+
+      <div className={styles.switchRow}>
+        <div className={styles.rowText}>
+          <p className={styles.rowTitle}>允许转发到内网地址</p>
+          <p className={styles.rowDesc}>
+            只有当你的 WebDAV 装在局域网（NAS、路由器等）时才需要打开。打开后，本应用服务器可以被请求去访问内网地址，请勿在公网多人共用的部署上开启。
+          </p>
+          {!serverReachable && (
+            <p className={styles.fieldHint}>需要本应用服务器在运行才能修改该开关。</p>
+          )}
+        </div>
+        <Toggle
+          checked={relayAllowPrivate === true}
+          label="允许转发到内网地址"
+          disabled={!serverReachable || relayAllowPrivate === null || relaySaving}
+          onChange={(next) => void toggleRelay(next)}
+        />
+      </div>
 
       <label className={styles.field}>
         <span className={styles.fieldLabel}>服务器地址</span>
