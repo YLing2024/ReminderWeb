@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, migrateAppLockSettings } from './storage';
+import { DEFAULT_SETTINGS, migrateAppLockSettings, migrateLegacyWebDavSettings } from './storage';
 
 describe('DEFAULT_SETTINGS 默认值', () => {
   it('默认主题色板对齐上游（首启动为蓝色系）', () => {
@@ -47,5 +47,28 @@ describe('migrateAppLockSettings（旧 PIN 字段兼容）', () => {
     });
     expect(migrated.appLockPasswordHash).toBe(legacy);
     expect('appLockPinHash' in migrated).toBe(false);
+  });
+});
+
+describe('migrateLegacyWebDavSettings（M7 凭据迁移到服务端）', () => {
+  it('清空浏览器遗留的地址/用户名/口令并标记已迁移', () => {
+    const result = migrateLegacyWebDavSettings({
+      webdavServer: 'https://dav.example.com/reminder/',
+      webdavUsername: 'davuser',
+      webdavPassword: 'secret-token',
+      themeOption: 'DARK',
+    });
+    expect(result.migrated).toBe(true);
+    expect(result.settings.webdavServer).toBe('');
+    expect(result.settings.webdavUsername).toBe('');
+    expect(result.settings.webdavPassword).toBe('');
+    expect(result.settings.themeOption).toBe('DARK');
+    expect(JSON.stringify(result.settings)).not.toContain('secret-token');
+  });
+
+  it('没有遗留凭据时不标记迁移', () => {
+    const result = migrateLegacyWebDavSettings({ themeOption: 'LIGHT' });
+    expect(result.migrated).toBe(false);
+    expect(result.settings.themeOption).toBe('LIGHT');
   });
 });

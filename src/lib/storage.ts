@@ -80,6 +80,12 @@ export interface PersistedData {
   settings: AppSettings;
 }
 
+/** `loadPersistedData` 的结果，附带旧版凭据迁移标记。 */
+export interface LoadedData extends PersistedData {
+  /** 读到并清除了浏览器里遗留的 WebDAV 凭据（已迁移到服务端配置）。 */
+  webdavCredsMigrated: boolean;
+}
+
 export const DEFAULT_SETTINGS: AppSettings = {
   themeOption: 'SYSTEM',
   pureBlackEnabled: false,
@@ -133,17 +139,42 @@ export function migrateAppLockSettings(rawSettings: Record<string, unknown>): Re
   return next;
 }
 
-export async function loadPersistedData(): Promise<PersistedData> {
+/**
+ * 兼容旧版设置：M7 起 WebDAV 凭据由服务端环境变量持有，浏览器不再保存。
+ * 读取时把遗留的 `webdavServer / webdavUsername / webdavPassword` 清空并标记已迁移。
+ * 纯函数，便于单测。
+ */
+export const LEGACY_WEBDAV_CREDENTIAL_KEYS = ['webdavServer', 'webdavUsername', 'webdavPassword'] as const;
+
+export function migrateLegacyWebDavSettings(rawSettings: Record<string, unknown>): {
+  settings: Record<string, unknown>;
+  migrated: boolean;
+} {
+  const next = { ...rawSettings };
+  let migrated = false;
+  for (const key of LEGACY_WEBDAV_CREDENTIAL_KEYS) {
+    const value = next[key];
+    if (typeof value === 'string' && value.trim() !== '') migrated = true;
+    if (key in next) next[key] = '';
+  }
+  return { settings: next, migrated };
+}
+
+export async function loadPersistedData(): Promise<LoadedData> {
   const raw: unknown = await get(DATA_KEY, store);
   if (!isRecord(raw)) {
-    return { reminders: [], tags: [], settings: { ...DEFAULT_SETTINGS } };
+    return { reminders: [], tags: [], settings: { ...DEFAULT_SETTINGS }, webdavCredsMigrated: false };
   }
   const reminders = Array.isArray(raw.reminders) ? normalizeReminderList(raw.reminders) : [];
   const tags = Array.isArray(raw.tags) ? normalizeTagList(raw.tags) : [];
-  const settings = isRecord(raw.settings)
-    ? { ...DEFAULT_SETTINGS, ...(migrateAppLockSettings(raw.settings) as Partial<AppSettings>) }
-    : { ...DEFAULT_SETTINGS };
-  return { reminders, tags, settings };
+  const webdavMigration = isRecord(raw.settings)
+    ? migrateLegacyWebDavSettings(raw.settings)
+    : { settings: {}, migrated: false };
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    ...(migrateAppLockSettings(webdavMigration.settings) as Partial<AppSettings>),
+  };
+  return { reminders, tags, settings, webdavCredsMigrated: webdavMigration.migrated };
 }
 
 export async function savePersistedData(data: PersistedData): Promise<void> {

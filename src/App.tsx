@@ -7,7 +7,6 @@ import { ServerLoginDialog } from './components/ServerLoginDialog';
 import { ServerStatusBar } from './components/ServerStatusBar';
 import { ThemeController } from './components/ThemeController';
 import HomePage from './pages/HomePage';
-import { useCloudAutoBackup } from './lib/cloud-auto';
 import { useNotificationScheduler } from './lib/notifications';
 import { useServerSync } from './lib/server-sync';
 import { useReminderStore } from './store/useReminderStore';
@@ -31,7 +30,6 @@ export default function App() {
   }, [loaded, hydrate]);
 
   useNotificationScheduler();
-  useCloudAutoBackup();
   useServerSync();
 
   return (

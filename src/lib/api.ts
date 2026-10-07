@@ -62,6 +62,24 @@ export interface VersionInfo {
   schemaVersion: number;
 }
 
+/** 远端备份文件（仅本应用格式，时间倒序）。 */
+export interface RemoteBackupFile {
+  name: string;
+  modifiedAt: number;
+}
+
+/** WebDAV 同步状态（不含凭据与远端其它文件信息）。 */
+export interface SyncStatus {
+  enabled: boolean;
+  url: string;
+  lastSyncAt: number | null;
+  lastUploadAt: number | null;
+  lastResult: 'ok' | 'error' | null;
+  lastError: string | null;
+  pendingChanges: boolean;
+  remoteFiles: RemoteBackupFile[];
+}
+
 export interface PushPayload {
   baseRevision: number;
   reminders: SyncReminder[];
@@ -200,6 +218,16 @@ export async function fetchVersion(deps: ApiDeps = {}): Promise<VersionInfo> {
 
 export async function fetchData(deps: ApiDeps = {}): Promise<ServerSnapshot> {
   return request<ServerSnapshot>('GET', '/api/data', undefined, deps);
+}
+
+/** 读取后端 WebDAV 同步状态。 */
+export async function fetchSyncStatus(deps: ApiDeps = {}): Promise<SyncStatus> {
+  return request<SyncStatus>('GET', '/api/sync/status', undefined, deps);
+}
+
+/** 触发后端立即执行一次 WebDAV 同步（进行中/未启用时后端返回 409）。 */
+export async function triggerSyncNow(deps: ApiDeps = {}): Promise<SyncStatus> {
+  return request<SyncStatus>('POST', '/api/sync/now', undefined, deps);
 }
 
 export async function pushData(payload: PushPayload, deps: ApiDeps = {}): Promise<PushResult> {

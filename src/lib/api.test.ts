@@ -3,12 +3,14 @@ import {
   API_TIMEOUT_MS,
   ApiError,
   fetchData,
+  fetchSyncStatus,
   isUnauthorized,
   login,
   mapHttpStatus,
   probeHealth,
   pushData,
   ssoLoginUrl,
+  triggerSyncNow,
   type ApiDeps,
 } from './api';
 
@@ -143,5 +145,50 @@ describe('请求构造', () => {
 
   it('ssoLoginUrl 编码 next', () => {
     expect(ssoLoginUrl('/settings?x=1')).toBe('/_auth/login?next=%2Fsettings%3Fx%3D1');
+  });
+});
+
+describe('WebDAV 同步状态接口', () => {
+  const SYNC_STATUS = {
+    enabled: true,
+    url: 'https://dav.example.com/reminder/',
+    lastSyncAt: 1,
+    lastUploadAt: 2,
+    lastResult: 'ok',
+    lastError: null,
+    pendingChanges: false,
+    remoteFiles: [{ name: 'reminder-backup-20260101-120000.zip', modifiedAt: 3 }],
+  };
+
+  it('fetchSyncStatus：GET /api/sync/status 并原样返回状态', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const deps: ApiDeps = {
+      base: 'https://api.example.com',
+      fetchImpl: (async (url: string, init: RequestInit) => {
+        calls.push({ url, init });
+        return jsonResponse(SYNC_STATUS);
+      }) as unknown as typeof fetch,
+    };
+    await expect(fetchSyncStatus(deps)).resolves.toEqual(SYNC_STATUS);
+    expect(calls[0]!.url).toBe('https://api.example.com/api/sync/status');
+    expect(calls[0]!.init.method).toBe('GET');
+  });
+
+  it('triggerSyncNow：POST /api/sync/now，409 映射为中文冲突', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const deps: ApiDeps = {
+      fetchImpl: (async (url: string, init: RequestInit) => {
+        calls.push({ url, init });
+        return jsonResponse({ error: 'sync_in_progress' }, 409);
+      }) as unknown as typeof fetch,
+    };
+    await expect(triggerSyncNow(deps)).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(calls[0]!.url).toBe('/api/sync/now');
+    expect(calls[0]!.init.method).toBe('POST');
+  });
+
+  it('triggerSyncNow：成功后返回最新状态', async () => {
+    const deps: ApiDeps = { fetchImpl: (async () => jsonResponse({ ...SYNC_STATUS, lastResult: 'ok' })) as unknown as typeof fetch };
+    await expect(triggerSyncNow(deps)).resolves.toMatchObject({ enabled: true, lastResult: 'ok' });
   });
 });

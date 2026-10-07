@@ -248,7 +248,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
 
     hydrate: async () => {
       const local = await loadPersistedData();
-      set({ reminders: local.reminders, tags: local.tags, settings: local.settings, loaded: true });
+      set({
+        reminders: local.reminders,
+        tags: local.tags,
+        settings: local.settings,
+        loaded: true,
+        ...(local.webdavCredsMigrated ? { serverNotice: '云备份凭据已迁移到服务器端配置' } : {}),
+      });
 
       const health = await probeHealth();
       if (health === null) {
