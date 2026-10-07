@@ -29,6 +29,7 @@ interface ReminderStore {
   deleteTag: (id: number) => Promise<void>;
   moveTag: (id: number, direction: 'up' | 'down') => Promise<void>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
+  importData: (data: { reminders: ReminderItem[]; tags: TagItem[]; settings?: Partial<AppSettings> }) => Promise<void>;
   resetAll: () => Promise<void>;
 }
 
@@ -146,6 +147,15 @@ export const useReminderStore = create<ReminderStore>((set, get) => {
 
     updateSettings: async (partial) => {
       set({ settings: { ...get().settings, ...partial } });
+      await persist();
+    },
+
+    importData: async (data) => {
+      set({
+        reminders: data.reminders,
+        tags: data.tags,
+        settings: { ...get().settings, ...(data.settings ?? {}) },
+      });
       await persist();
     },
 

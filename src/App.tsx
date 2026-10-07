@@ -13,6 +13,7 @@ const TagPage = lazy(() => import('./pages/TagPage'));
 const DateCalculatorPage = lazy(() => import('./pages/DateCalculatorPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
+const BackupPage = lazy(() => import('./pages/BackupPage'));
 
 export default function App() {
   const loaded = useReminderStore((state) => state.loaded);
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/tags" element={<TagPage />} />
           <Route path="/calculator" element={<LunarGate><DateCalculatorPage /></LunarGate>} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/backup" element={<BackupPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

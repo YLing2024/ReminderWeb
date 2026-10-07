@@ -296,7 +296,7 @@ export default function SettingsPage() {
               title="备份与恢复"
               description="导入或导出与安卓互通的备份包"
               icon={<StorageIcon width={20} height={20} />}
-              onClick={() => setNotice('备份与恢复将在后续版本提供。')}
+              onClick={() => navigate('/backup')}
             />
             <div className={styles.subBlock}>
               <p className={styles.rowTitle}>备份提醒</p>

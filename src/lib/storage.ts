@@ -31,6 +31,8 @@ export interface AppSettings {
   reminderMethod: 'APP_NOTIFICATION' | 'ICS';
   /** 数据：备份提醒开关。 */
   backupReminderEnabled: boolean;
+  /** 数据：导出备份时是否启用「加密（兼容安卓）」。 */
+  backupEncryptionEnabled: boolean;
   /** 数据：上次备份时间（epoch 毫秒），从未备份为 null。 */
   lastBackupAt: number | null;
   /** 安全：应用锁开关。 */
@@ -60,6 +62,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultAdvanceDays: 0,
   reminderMethod: 'APP_NOTIFICATION',
   backupReminderEnabled: false,
+  backupEncryptionEnabled: true,
   lastBackupAt: null,
   appLockEnabled: false,
   appLockPinHash: null,
@@ -114,4 +117,17 @@ export async function listImageNames(): Promise<string[]> {
   return all
     .filter((key) => typeof key === 'string' && key.startsWith(IMAGE_KEY_PREFIX))
     .map((key) => key.slice(IMAGE_KEY_PREFIX.length));
+}
+
+/** 用给定图片集合替换本地图片库：未出现在集合中的旧图片会被删除。 */
+export async function replaceImageBlobs(images: Record<string, Blob>): Promise<void> {
+  const existing = await listImageNames();
+  for (const name of existing) {
+    if (!Object.prototype.hasOwnProperty.call(images, name)) {
+      await del(imageKey(name), store);
+    }
+  }
+  for (const [name, blob] of Object.entries(images)) {
+    await set(imageKey(name), blob, store);
+  }
 }
