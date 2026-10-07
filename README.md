@@ -87,12 +87,25 @@ Service Worker 与 manifest 在构建时自动生成。
 
 ## 截图
 
-> 截图位（构建产物实机截图，待补充）。可放入 `docs/screenshots/` 并以
-> `![首页](docs/screenshots/home.png)` 形式引用。
+| 首页（桌面） | 首页（手机） |
+| --- | --- |
+| ![首页（桌面）](docs/screenshots/home-desktop.png) | ![首页（手机）](docs/screenshots/home-mobile.png) |
 
-| 首页 | 新增 / 编辑 | 详情 | 设置 |
-| --- | --- | --- | --- |
-| _待补充_ | _待补充_ | _待补充_ | _待补充_ |
+| 新增 / 编辑 | 详情 |
+| --- | --- |
+| ![新增提醒](docs/screenshots/edit-desktop.png) | ![提醒详情](docs/screenshots/detail-desktop.png) |
+
+| 平板 |
+| --- |
+| ![首页（平板）](docs/screenshots/home-tablet.png) |
+
+| 备份与恢复 | WebDAV 云备份 | 应用锁 |
+| --- | --- | --- |
+| ![备份与恢复](docs/screenshots/backup-desktop.png) | ![WebDAV 云备份](docs/screenshots/settings-cloud-mobile.png) | ![应用锁](docs/screenshots/lock-screen.png) |
+
+> 同一套界面在三种宽度下自适应：手机（底部导航 + 右侧抽屉「目录」，窄屏同样保留导航）、
+> 平板与桌面（左侧导航，卡片网格 2 / 3 列）。截图为构建产物实机截图，
+> 其中示例数据、`https://dav.example.com/dav/`、`davuser` 等均为占位内容。
 
 ## 许可
 
