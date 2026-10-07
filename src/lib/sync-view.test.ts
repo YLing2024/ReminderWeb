@@ -3,11 +3,11 @@ import {
   actionLabel,
   appliedTotal,
   deleteConfirmMessage,
-  deleteDisabledReason,
   formatBytes,
   formatSyncTime,
   lastResultText,
   restoreConfirmMessage,
+  restoreOverwriteConfirmMessage,
 } from './sync-view';
 import type { SyncStatus } from './api';
 
@@ -51,11 +51,6 @@ describe('sync-view 展示逻辑', () => {
     expect(appliedTotal({ updated: 0, added: 0, removed: 0 })).toBe(0);
   });
 
-  it('deleteDisabledReason：别人的包给出原因，自己的包可删', () => {
-    expect(deleteDisabledReason({ isOwn: true })).toBeNull();
-    expect(deleteDisabledReason({ isOwn: false })).toContain('不能在本机删除');
-  });
-
   it('lastResultText：未同步 / 成功 / 失败含原因', () => {
     expect(lastResultText(STATUS)).toBe('尚未同步');
     expect(lastResultText({ ...STATUS, lastResult: 'ok' })).toBe('成功');
@@ -70,9 +65,16 @@ describe('sync-view 展示逻辑', () => {
     expect(message).toContain('也不会删除云端文件');
   });
 
-  it('删除确认文案：给出文件名并提示不可恢复', () => {
+  it('客户端覆盖恢复文案：说明覆盖本机全部数据', () => {
+    const message = restoreOverwriteConfirmMessage('reminder-backup-20260101-120000.zip');
+    expect(message).toContain('reminder-backup-20260101-120000.zip');
+    expect(message).toContain('覆盖当前全部数据');
+  });
+
+  it('删除确认文案：给出文件名、点明从 WebDAV 目录删除且不可恢复', () => {
     const message = deleteConfirmMessage('reminder-backup-20260101-120000.zip');
     expect(message).toContain('reminder-backup-20260101-120000.zip');
+    expect(message).toContain('WebDAV 目录');
     expect(message).toContain('无法恢复');
   });
 });

@@ -4,17 +4,16 @@ import { renderToString } from 'react-dom/server';
 import { CloudBackupList, SyncStatusPanel, WebDavSettings } from './WebDavSettings';
 import type { SyncStatus } from '../lib/api';
 
-const OWN = {
+const FIRST = {
   name: 'reminder-backup-20260102-120000.zip',
   size: 2048,
   modifiedAt: 1_700_000_000_000,
-  isOwn: true,
 };
-const FOREIGN = {
+
+const SECOND = {
   name: 'reminder-backup-20260101-120000.zip',
   size: 512,
   modifiedAt: 1_690_000_000_000,
-  isOwn: false,
 };
 
 const STATUS: SyncStatus = {
@@ -39,31 +38,28 @@ describe('CloudBackupList 云端备份列表', () => {
     expect(html).toContain('云端还没有备份');
   });
 
-  it('渲染名称/大小/恢复删除；别人的包删除按钮置灰并给出原因', () => {
+  it('渲染名称/大小/恢复删除；任何备份都可删除（不再置灰）', () => {
     const html = renderToString(
       createElement(CloudBackupList, {
-        files: [OWN, FOREIGN],
+        files: [FIRST, SECOND],
         onRestore: () => {},
         onDelete: () => {},
         busy: false,
       }),
     );
-    expect(html).toContain(OWN.name);
-    expect(html).toContain(FOREIGN.name);
+    expect(html).toContain(FIRST.name);
+    expect(html).toContain(SECOND.name);
     expect(html).toContain('2.0 KB');
     expect(html).toContain('512 B');
     expect(html.match(/>恢复<\/button>/g)?.length).toBe(2);
     expect(html.match(/>删除<\/button>/g)?.length).toBe(2);
-    // 只有别人的包那个删除按钮被禁用。
-    expect(html.match(/disabled=""/g)?.length).toBe(1);
-    expect(html).toContain('别的设备上传的备份，不能在本机删除');
-    expect(html).toContain('本设备上传');
+    expect(html.match(/disabled=""/g) ?? []).toHaveLength(0);
   });
 
   it('busy 时恢复与删除按钮都禁用', () => {
     const html = renderToString(
       createElement(CloudBackupList, {
-        files: [OWN],
+        files: [FIRST],
         onRestore: () => {},
         onDelete: () => {},
         busy: true,
@@ -108,10 +104,30 @@ describe('SyncStatusPanel 状态渲染', () => {
   });
 });
 
-describe('WebDavSettings 分组外壳', () => {
-  it('顶部说明这些设置存服务器、且不再保存凭据', () => {
-    const html = renderToString(createElement(WebDavSettings, { onNotice: () => {} }));
-    expect(html).toContain('这些设置在服务器上，所有设备一致');
-    expect(html).toContain('地址与口令已迁移到服务器端配置，本页不再保存凭据');
+describe('WebDavSettings 两模式分组显隐', () => {
+  it('服务器模式：显示服务端策略面板，不出现浏览器直连输入框', () => {
+    const html = renderToString(createElement(WebDavSettings, { onNotice: () => {}, mode: 'server' }));
+    expect(html).toContain('凭据保存在服务器，由服务器与 WebDAV 通信');
+    expect(html).toContain('立即同步');
+    expect(html).toContain('自动同步');
+    expect(html).not.toContain('placeholder="https://dav.example.com/dav/"');
+    expect(html).not.toContain('测试连接');
+  });
+
+  it('客户端模式：显示 WebDAV 直连输入框与浏览器直连操作', () => {
+    const html = renderToString(createElement(WebDavSettings, { onNotice: () => {}, mode: 'client' }));
+    expect(html).toContain('浏览器直连你的 WebDAV 服务器');
+    expect(html).toContain('placeholder="https://dav.example.com/dav/"');
+    expect(html).toContain('测试连接');
+    expect(html).toContain('立即备份');
+    expect(html).toContain('从云端恢复');
+    expect(html).toContain('自动备份');
+    expect(html).toContain('保留份数');
+    expect(html).not.toContain('立即同步');
+  });
+
+  it('检测中：显示检测提示', () => {
+    const html = renderToString(createElement(WebDavSettings, { onNotice: () => {}, mode: 'unknown' }));
+    expect(html).toContain('正在检测运行模式');
   });
 });

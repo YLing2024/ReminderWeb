@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, migrateAppLockSettings, migrateLegacyWebDavSettings } from './storage';
+import { DEFAULT_SETTINGS, migrateAppLockSettings } from './storage';
 
 describe('DEFAULT_SETTINGS 默认值', () => {
   it('默认主题色板对齐上游（首启动为蓝色系）', () => {
@@ -50,25 +50,10 @@ describe('migrateAppLockSettings（旧 PIN 字段兼容）', () => {
   });
 });
 
-describe('migrateLegacyWebDavSettings（M7 凭据迁移到服务端）', () => {
-  it('清空浏览器遗留的地址/用户名/口令并标记已迁移', () => {
-    const result = migrateLegacyWebDavSettings({
-      webdavServer: 'https://dav.example.com/reminder/',
-      webdavUsername: 'davuser',
-      webdavPassword: 'secret-token',
-      themeOption: 'DARK',
-    });
-    expect(result.migrated).toBe(true);
-    expect(result.settings.webdavServer).toBe('');
-    expect(result.settings.webdavUsername).toBe('');
-    expect(result.settings.webdavPassword).toBe('');
-    expect(result.settings.themeOption).toBe('DARK');
-    expect(JSON.stringify(result.settings)).not.toContain('secret-token');
-  });
-
-  it('没有遗留凭据时不标记迁移', () => {
-    const result = migrateLegacyWebDavSettings({ themeOption: 'LIGHT' });
-    expect(result.migrated).toBe(false);
-    expect(result.settings.themeOption).toBe('LIGHT');
+describe('migrateLegacyWebDavSettings（已移除：客户端模式需要浏览器直连凭据）', () => {
+  it('默认设置里 WebDAV 凭据字段存在且为空（仅本机，不上传）', () => {
+    expect(DEFAULT_SETTINGS.webdavServer).toBe('');
+    expect(DEFAULT_SETTINGS.webdavUsername).toBe('');
+    expect(DEFAULT_SETTINGS.webdavPassword).toBe('');
   });
 });

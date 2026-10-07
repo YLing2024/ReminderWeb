@@ -17,6 +17,14 @@ export function apiBase(): string {
   return trimmed.replace(/\/+$/, '');
 }
 
+/**
+ * 请求凭据策略（M10 §2）：跨域（配置了 `VITE_API_BASE`）时用 `include` 以携带 Cookie，
+ * 同源仍用 `same-origin`。
+ */
+export function requestCredentials(base: string): RequestCredentials {
+  return base === '' ? 'same-origin' : 'include';
+}
+
 /** 可注入依赖（测试用；生产走默认值）。 */
 export interface ApiDeps {
   fetchImpl?: typeof fetch;
@@ -68,12 +76,11 @@ export interface RemoteBackupFile {
   modifiedAt: number;
 }
 
-/** 云端备份条目（M9 §2.1）：isOwn 决定能否删除。 */
+/** 云端备份条目（M10 §4）：任何本应用备份都可恢复 / 删除。 */
 export interface RemoteBackupEntry {
   name: string;
   size: number;
   modifiedAt: number;
-  isOwn: boolean;
 }
 
 /** 同步动作（M9 §2.5）。 */
@@ -186,10 +193,6 @@ function mapFetchError(error: unknown): ApiError {
   return new ApiError('NETWORK', '连不上服务器，请检查网络');
 }
 
-function buildUrl(path: string, deps: ApiDeps): string {
-  return `${deps.base ?? apiBase()}${path}`;
-}
-
 /** 从错误响应体取服务端中文文案（有则优先，否则回落到状态码映射）。 */
 async function errorFromResponse(response: Response): Promise<ApiError> {
   const mapped = mapHttpStatus(response.status);
@@ -219,10 +222,11 @@ async function request<T>(
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? API_TIMEOUT_MS);
+  const base = deps.base ?? apiBase();
   try {
-    const response = await fetchImpl(buildUrl(path, deps), {
+    const response = await fetchImpl(`${base}${path}`, {
       method,
-      credentials: 'same-origin',
+      credentials: requestCredentials(base),
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,

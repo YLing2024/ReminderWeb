@@ -135,8 +135,25 @@ describe('请求构造', () => {
     );
     expect(calls[0]!.url).toBe('https://api.example.com/api/data');
     expect(calls[0]!.init.method).toBe('PUT');
-    expect(calls[0]!.init.credentials).toBe('same-origin');
+    expect(calls[0]!.init.credentials).toBe('include');
     expect(calls[0]!.init.headers).toMatchObject({ 'Content-Type': 'application/json' });
+  });
+
+  it('同源（未配 VITE_API_BASE）用 same-origin，跨域（配了）用 include', async () => {
+    const calls: Array<RequestInit> = [];
+    const body = { revision: 1, reminders: [], tags: [], settings: { value: {}, updatedAt: 0 }, tombstones: [], serverRevisionBefore: 0, baseRevision: 0, rejected: 0 };
+    const sameOrigin: ApiDeps = {
+      fetchImpl: (async (_url: string, init: RequestInit) => {
+        calls.push(init);
+        return jsonResponse(body);
+      }) as unknown as typeof fetch,
+    };
+    await pushData({ baseRevision: 0, reminders: [], tags: [], settings: { value: {}, updatedAt: 0 }, tombstones: [] }, sameOrigin);
+    expect(calls[0]!.credentials).toBe('same-origin');
+
+    const crossOrigin: ApiDeps = { base: 'https://api.example.com', ...sameOrigin };
+    await pushData({ baseRevision: 0, reminders: [], tags: [], settings: { value: {}, updatedAt: 0 }, tombstones: [] }, crossOrigin);
+    expect(calls[1]!.credentials).toBe('include');
   });
 
   it('API_TIMEOUT_MS 为 15 秒', () => {

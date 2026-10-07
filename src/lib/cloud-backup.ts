@@ -8,6 +8,7 @@ import type { ReminderItem, TagItem } from '../types/reminder';
 import type { AppSettings } from './storage';
 import { exportBackup, importBackup, type ImportResult } from './backup-service';
 import {
+  deleteBackup,
   downloadBackup,
   listBackups,
   pruneBackups,
@@ -79,4 +80,13 @@ export async function restoreCloudBackup(
   const config = webDavConfigFrom(settings);
   const bytes = await downloadBackup(config, fileName, deps);
   return importBackup(bytes);
+}
+
+/** 从 WebDAV 目录删除指定备份（客户端模式）。 */
+export async function deleteCloudBackup(
+  settings: AppSettings,
+  fileName: string,
+  deps: WebDavDeps = {},
+): Promise<void> {
+  await deleteBackup(webDavConfigFrom(settings), fileName, deps);
 }
