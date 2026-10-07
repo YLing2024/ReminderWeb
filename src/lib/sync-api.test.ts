@@ -70,7 +70,7 @@ describe('同步配置接口', () => {
 
 describe('云端备份接口', () => {
   it('fetchSyncFiles：GET /api/sync/files 返回列表', async () => {
-    const files = [{ name: 'reminder-backup-20260101-120000.zip', size: 123, modifiedAt: 1, isOwn: false }];
+    const files = [{ name: 'reminder-backup-20260101-120000.zip', size: 123, modifiedAt: 1 }];
     const { deps, calls } = recordingFetch({ files });
     await expect(fetchSyncFiles(deps)).resolves.toEqual(files);
     expect(calls[0]!.url).toBe('https://api.example.com/api/sync/files');
@@ -112,11 +112,11 @@ describe('云端备份接口', () => {
     expect(calls[0]!.init.method).toBe('DELETE');
   });
 
-  it('deleteSyncFile：别人的包 403 中文文案', async () => {
-    const { deps } = recordingFetch({ error: 'forbidden', message: '只能删除本服务上传的备份，不能删除其他设备上传的备份' }, 403);
+  it('deleteSyncFile：服务端 403 透传中文文案（映射为 FORBIDDEN）', async () => {
+    const { deps } = recordingFetch({ error: 'forbidden', message: '没有权限执行该操作' }, 403);
     await expect(deleteSyncFile('reminder-backup-20260101-120000.zip', deps)).rejects.toMatchObject({
       code: 'FORBIDDEN',
-      message: '只能删除本服务上传的备份，不能删除其他设备上传的备份',
+      message: '没有权限执行该操作',
     });
   });
 });

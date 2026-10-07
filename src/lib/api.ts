@@ -303,7 +303,7 @@ export async function updateSyncConfig(
   return request<SyncConfig>('PUT', '/api/sync/config', patch, deps);
 }
 
-/** 列出云端备份（含 isOwn，时间倒序）。 */
+/** 列出云端备份（时间倒序）。 */
 export async function fetchSyncFiles(deps: ApiDeps = {}): Promise<RemoteBackupEntry[]> {
   const body = await request<{ files: RemoteBackupEntry[] }>('GET', '/api/sync/files', undefined, deps);
   return Array.isArray(body.files) ? body.files : [];
