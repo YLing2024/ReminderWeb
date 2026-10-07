@@ -159,6 +159,23 @@ describe('M11 §1：本机选择（localStorage）优先级最高', () => {
     expect(readStoredAppMode(storage)).toBe('client');
   });
 
+  it('写入 localStorage 后可读回，重载（再次 detect）仍以该模式为准', async () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    };
+    writeStoredAppMode('client', storage);
+    expect(store.get(APP_MODE_STORAGE_KEY)).toBe('client');
+    expect(readStoredAppMode(storage)).toBe('client');
+
+    // 模拟重载：即使构建期 env 是 server，本机选择仍优先。
+    const detection = await detectAppMode({ storage, envMode: 'server' });
+    expect(detection).toEqual({ mode: 'client', source: 'local', health: null, staticOnly: false });
+  });
+
   it('本机选择高于 config.json / VITE_APP_MODE / 探测', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ mode: 'server' }));
     const probe = vi.fn(async () => HEALTH);
