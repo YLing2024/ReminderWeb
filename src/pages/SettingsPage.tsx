@@ -21,7 +21,7 @@ import { PasswordField } from '../components/PasswordField';
 import { ModeSettings } from '../components/ModeSettings';
 import { ServerSettings } from '../components/ServerSettings';
 import { WebDavSettings } from '../components/WebDavSettings';
-import { SEED_PALETTES } from '../lib/theme';
+import { SEED_PALETTES, THEME_OPTIONS } from '../lib/theme';
 import { changeLockPassword, clearLockPassword, setupLockPassword } from '../lib/app-lock';
 import { buildIcs } from '../lib/ics';
 import { ensureLunar } from '../lib/lunar';
@@ -29,14 +29,7 @@ import { todayLocalDate } from '../lib/local-date';
 import { useReminderStore } from '../store/useReminderStore';
 import styles from './SettingsPage.module.css';
 
-type ThemeOption = 'SYSTEM' | 'LIGHT' | 'DARK';
 type DefaultPage = 'COUNTDOWN' | 'COUNTUP' | 'BIRTHDAY';
-
-const THEME_OPTIONS: Array<{ value: ThemeOption; label: string }> = [
-  { value: 'SYSTEM', label: '自动' },
-  { value: 'LIGHT', label: '浅色' },
-  { value: 'DARK', label: '深色' },
-];
 
 const DEFAULT_PAGE_OPTIONS: Array<{ value: DefaultPage; label: string }> = [
   { value: 'COUNTDOWN', label: '倒数日' },

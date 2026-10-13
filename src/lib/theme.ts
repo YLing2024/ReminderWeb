@@ -8,6 +8,29 @@
 import { Scheme, argbFromHex, hexFromArgb } from '@material/material-color-utilities';
 
 export type ThemeOption = 'SYSTEM' | 'LIGHT' | 'DARK';
+
+/** 主题三态选项（顶栏控件与设置页共用同一份文案与取值）。 */
+export const THEME_OPTIONS: Array<{ value: ThemeOption; label: string }> = [
+  { value: 'SYSTEM', label: '自动' },
+  { value: 'LIGHT', label: '浅色' },
+  { value: 'DARK', label: '深色' },
+];
+
+/**
+ * 首屏防闪缓存键：保存「system 感知后」解析出的最终明暗（light/dark），
+ * 由 index.html 的 head 内联脚本在首屏绘制前读取；真正的调色板仍由 React 启动后的
+ * ThemeController 应用，内联脚本只做最小必要的底色与 data-theme 防闪。
+ */
+export const RESOLVED_THEME_KEY = 'reminderweb:resolved-theme';
+
+export type ResolvedTheme = 'light' | 'dark';
+
+/** localStorage 的最小接口，便于在无 DOM 的单测里注入替身。 */
+export interface ThemeStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
 export type ThemeColorPalette =
   | 'BLUE'
   | 'GREEN'
@@ -39,6 +62,38 @@ export const SEED_PALETTES: SeedPalette[] = [
 
 /** M3 基线紫，作为无种子时的回退。 */
 export const FALLBACK_SEED = '#6750A4';
+
+/**
+ * 由主题三态与系统偏好解析出最终明暗。
+ * SYSTEM 时跟随系统；LIGHT / DARK 时忽略系统偏好。纯函数，便于单测。
+ */
+export function resolveDark(option: ThemeOption, systemDark: boolean): boolean {
+  return option === 'DARK' || (option === 'SYSTEM' && systemDark);
+}
+
+/** 读取首屏防闪缓存（非法或缺失返回 null）。 */
+export function readResolvedTheme(storage: ThemeStorage | null | undefined): ResolvedTheme | null {
+  if (storage === null || storage === undefined) return null;
+  try {
+    const value = storage.getItem(RESOLVED_THEME_KEY);
+    return value === 'light' || value === 'dark' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 写入首屏防闪缓存；存储不可用时静默忽略。 */
+export function writeResolvedTheme(
+  storage: ThemeStorage | null | undefined,
+  dark: boolean,
+): void {
+  if (storage === null || storage === undefined) return;
+  try {
+    storage.setItem(RESOLVED_THEME_KEY, dark ? 'dark' : 'light');
+  } catch {
+    // 隐私模式 / 存储被禁用：防闪缓存尽力而为，不影响主题应用。
+  }
+}
 
 /** 解析当前设置应使用的种子色（ARGB 整数）。 */
 export function resolveSeedArgb(
