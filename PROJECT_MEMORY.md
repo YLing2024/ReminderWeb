@@ -91,6 +91,19 @@ DEBOUNCE_SECONDS/TIMEOUT_SECONDS/RELAY_ALLOW_PRIVATE`（**均降为首次默认�
 5. 测试与实测：单元 + 临时实例（端口 18941）+ 临时库 + 本地假 WebDAV，断言上传用新地址与新凭据、
    审计无口令明文。
 
+## 本次变更（主题补缺：顶栏切换 + 首屏防闪）
+
+1. `lib/theme.ts`：新增 `THEME_OPTIONS`（自动/浅色/深色，设置页与顶栏共用）、
+   `resolveDark`、`RESOLVED_THEME_KEY`、`readResolvedTheme` / `writeResolvedTheme`；
+   `applyTheme` 显式同步 `color-scheme`（首屏内联脚本会写内联 colorScheme，需对齐）。
+2. `components/ThemeToggle` 接入首页顶栏：宽屏三选项分段控件、窄屏单按钮循环三态，
+   写回同一个 `settings.themeOption`，与设置页互相同步；窄屏不隐藏、不横向溢出。
+3. 首屏防闪：`ThemeController` 把「system 感知后」的 light/dark 写入 localStorage；
+   `index.html` head 内联脚本在首帧前给 html 打 `data-theme`/`color-scheme` 与中性底色。
+   真正的调色板仍由 React 启动后应用，内联脚本只做最小必要防闪。
+4. 测试：`theme.test.ts`（resolveDark / 缓存读写 / applyTheme / 内联脚本存在性与位置）、
+   `ThemeToggle.test.tsx`（三态文案、三选一、窄屏循环按钮）。
+
 ## 注意
 
 - `docs/` 需求文档不进库；改完更新本文件（≤200 行 / 12 KB）。
