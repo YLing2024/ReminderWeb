@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { applyTheme } from '../lib/theme';
+import { applyTheme, resolveDark, writeResolvedTheme } from '../lib/theme';
 import { useReminderStore } from '../store/useReminderStore';
 
 function prefersDark(): boolean {
@@ -25,9 +25,16 @@ export function ThemeController() {
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    const dark =
-      settings.themeOption === 'DARK' || (settings.themeOption === 'SYSTEM' && systemDark);
+    const dark = resolveDark(settings.themeOption, systemDark);
     applyTheme(document.documentElement, settings, dark);
+    // 把解析后的明暗缓存到 localStorage，供 index.html 首屏内联脚本防闪。
+    if (typeof window !== 'undefined') {
+      try {
+        writeResolvedTheme(window.localStorage, dark);
+      } catch {
+        // 存储不可用（隐私模式等）：忽略，不影响主题应用。
+      }
+    }
   }, [settings, systemDark]);
 
   return null;

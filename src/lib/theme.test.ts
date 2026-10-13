@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { argbFromHex } from '@material/material-color-utilities';
+import indexHtml from '../../index.html?raw';
 import {
   FALLBACK_SEED,
+  RESOLVED_THEME_KEY,
   computeThemeVars,
+  resolveDark,
   resolveSeedArgb,
   type ThemeSettings,
 } from './theme';
@@ -61,3 +64,28 @@ describe('computeThemeVars', () => {
     expect(vars['--md-sys-color-surface']).not.toBe('#000000');
   });
 });
+
+describe('resolveDark', () => {
+  it('SYSTEM 时跟随系统偏好', () => {
+    expect(resolveDark('SYSTEM', true)).toBe(true);
+    expect(resolveDark('SYSTEM', false)).toBe(false);
+  });
+
+  it('LIGHT / DARK 时忽略系统偏好', () => {
+    expect(resolveDark('LIGHT', true)).toBe(false);
+    expect(resolveDark('DARK', false)).toBe(true);
+  });
+});
+
+describe('index.html 首屏防闪内联脚本', () => {
+  it('在 </head> 之前，引用同一缓存键并设置 data-theme / color-scheme / 中性底色', () => {
+    const scriptAt = indexHtml.indexOf(RESOLVED_THEME_KEY);
+    expect(scriptAt).toBeGreaterThan(-1);
+    expect(scriptAt).toBeLessThan(indexHtml.indexOf('</head>'));
+    expect(indexHtml).toContain('prefers-color-scheme');
+    expect(indexHtml).toContain('dataset.theme');
+    expect(indexHtml).toContain('colorScheme');
+    expect(indexHtml).toContain('--app-page-bg');
+  });
+});
+
