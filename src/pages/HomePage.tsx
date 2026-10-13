@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ReminderCard } from '../components/ReminderCard';
 import { SectionHeader } from '../components/SectionHeader';
 import { HomeNav, type HomeCategory } from '../components/HomeNav';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { ConfirmDialog, IconButton, MenuOverlay, type MenuItem } from '../components/ui';
 import { GridIcon, ListIcon, PinIcon, PlusIcon, SearchIcon, SettingsIcon, EditIcon, DeleteIcon } from '../components/icons';
 import { buildReminderSections } from '../lib/sort';
@@ -161,6 +162,7 @@ export default function HomePage() {
         <header className={`${styles.topBar} ${topHidden ? styles.topBarHidden : ''}`}>
           <span className={styles.wordmark}>Reminder</span>
           <div className={styles.topActions}>
+            <ThemeToggle />
             <div className={styles.viewSwitch} role="group" aria-label="视图切换">
               <button
                 type="button"

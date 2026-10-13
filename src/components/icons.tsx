@@ -290,6 +290,32 @@ export function PaletteIcon(props: IconProps) {
   );
 }
 
+export function ContrastIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 3.5a8.5 8.5 0 0 0 0 17Z" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function LightModeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="4.2" />
+      <path d="M12 2.5v2.4M12 19.1v2.4M4.3 4.3l1.7 1.7M18 18l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.3 19.7 6 18M18 6l1.7-1.7" />
+    </Svg>
+  );
+}
+
+export function DarkModeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.5 8.5 0 1 0 10.2 10.2Z" />
+    </Svg>
+  );
+}
+
 export function HomeIcon(props: IconProps) {
   return (
     <Svg {...props}>
