@@ -174,6 +174,8 @@ export function applyTheme(root: HTMLElement, settings: ThemeSettings, dark: boo
   root.dataset.theme = dark ? 'dark' : 'light';
   root.dataset.pureBlack = dark && settings.pureBlackEnabled ? 'on' : 'off';
   root.dataset.cardColoring = settings.cardColoringEnabled ? 'on' : 'off';
+  // 显式写 color-scheme：首屏内联脚本会设置内联 colorScheme，若运行时不覆盖会与 data-theme 不一致。
+  root.style.colorScheme = dark ? 'dark' : 'light';
   for (const [key, value] of Object.entries(vars)) {
     root.style.setProperty(key, value);
   }

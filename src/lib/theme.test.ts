@@ -4,6 +4,7 @@ import indexHtml from '../../index.html?raw';
 import {
   FALLBACK_SEED,
   RESOLVED_THEME_KEY,
+  applyTheme,
   computeThemeVars,
   resolveDark,
   resolveSeedArgb,
@@ -62,6 +63,29 @@ describe('computeThemeVars', () => {
   it('浅色模式忽略纯黑', () => {
     const vars = computeThemeVars({ ...BASE, pureBlackEnabled: true }, false);
     expect(vars['--md-sys-color-surface']).not.toBe('#000000');
+  });
+});
+
+describe('applyTheme', () => {
+  it('同步 data-theme 与 color-scheme，并写入 CSS 变量', () => {
+    const props = new Map<string, string>();
+    const root = {
+      dataset: {} as Record<string, string>,
+      style: {
+        colorScheme: '',
+        setProperty: (key: string, value: string) => {
+          props.set(key, value);
+        },
+      },
+    };
+    applyTheme(root as unknown as HTMLElement, BASE, true);
+    expect(root.dataset.theme).toBe('dark');
+    expect(root.style.colorScheme).toBe('dark');
+    expect(props.get('--md-sys-color-surface')).toMatch(/^#/);
+
+    applyTheme(root as unknown as HTMLElement, BASE, false);
+    expect(root.dataset.theme).toBe('light');
+    expect(root.style.colorScheme).toBe('light');
   });
 });
 
