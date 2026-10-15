@@ -1,3 +1,7 @@
+> **本项目已停止维护（2026-10-16）**：纪念日 / 倒数日管理服务 —— 已用 Go 重写并迁移到
+> [YLing2024/reminderweb-go](https://github.com/YLing2024/reminderweb-go)。
+> 新版为单二进制、仅 MySQL、HTTP 只用标准库，并提供 SQLite → MySQL 迁移工具。
+> 本仓库仅作历史留存，不再修复或更新；生产环境已切换到新仓库。
 # ReminderWeb
 
 把安卓应用 **Reminder**（纪念日 / 倒数日管理）做成响应式 Web 应用：视觉风格一致、行为语义一致、**数据与安卓版双向互通**。
